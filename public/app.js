@@ -313,6 +313,7 @@ async function renderLogs() {
 // ---------------------------------------------------------------------
 async function renderSettings() {
   const { key } = await api('/gateway-key');
+  const syncStatus = await api('/sync/status');
   view.innerHTML = `
     <h1>Settings</h1>
     <p class="subhead">Konfigurasi lokal gateway lu.</p>
@@ -323,8 +324,37 @@ async function renderSettings() {
       <div style="margin-top:10px"><button class="btn small" id="regen-key">Regenerate key</button></div>
     </div>
     <div class="panel">
-      <h2>Export / Import config</h2>
-      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Backup atau pindahin semua provider, account, dan route ke mesin lain. File berisi API key dalam plain text — simpan aman, jangan commit ke repo publik.</p>
+      <h2>Cloud sync</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">
+        Sync provider, account, dan route ke mesin lain lewat <strong>private GitHub Gist</strong> milik lu sendiri.
+        Config dienkripsi (AES-256) pakai passphrase lu <em>sebelum</em> dikirim — GitHub cuma nyimpen ciphertext,
+        gak pernah liat API key asli lu. Token GitHub &amp; passphrase gak pernah disimpen di sini, cuma dipakai sekali pas proses push/pull.
+      </p>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px">
+        Status: ${syncStatus.gistId
+          ? `terhubung ke <a href="https://gist.github.com/${syncStatus.gistId}" target="_blank" style="color:var(--signal)">gist ${syncStatus.gistId.slice(0, 8)}…</a>${syncStatus.lastSyncedAt ? ` · terakhir sync ${new Date(syncStatus.lastSyncedAt).toLocaleString()}` : ''}`
+          : 'belum pernah sync dari mesin ini'}
+      </div>
+      <label>GitHub Personal Access Token</label>
+      <input type="password" id="sync-token" placeholder="ghp_... (scope: gist)" />
+      <label>Passphrase enkripsi</label>
+      <input type="password" id="sync-passphrase" placeholder="passphrase buat enkripsi config lu" />
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary small" id="sync-push">Push ke cloud</button>
+        <button class="btn small" id="sync-pull">Pull dari cloud</button>
+      </div>
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;color:var(--text-dim);font-size:12.5px">Mesin baru, mau pull dari gist yang udah ada?</summary>
+        <div style="margin-top:10px">
+          <label>Gist ID</label>
+          <input id="sync-link-id" placeholder="id gist dari mesin sebelumnya" />
+          <div style="margin-top:10px"><button class="btn small" id="sync-link">Hubungkan</button></div>
+        </div>
+      </details>
+    </div>
+    <div class="panel">
+      <h2>Export / Import config (manual, file lokal)</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Backup atau pindahin config lewat file, tanpa GitHub. File berisi API key dalam plain text — simpan aman, jangan commit ke repo publik.</p>
       <div class="row">
         <button class="btn small" id="export-btn">Export ke file</button>
         <label class="btn small" style="cursor:pointer">Import dari file<input type="file" id="import-file" accept="application/json" style="display:none" /></label>
@@ -336,6 +366,33 @@ async function renderSettings() {
     const { key } = await api('/gateway-key/regenerate', { method: 'POST' });
     document.getElementById('gw-key').textContent = key;
     toast('Key baru dibuat');
+  });
+  document.getElementById('sync-push').addEventListener('click', async () => {
+    const token = document.getElementById('sync-token').value.trim();
+    const passphrase = document.getElementById('sync-passphrase').value;
+    if (!token || !passphrase) return toast('Isi token dan passphrase dulu');
+    try {
+      await api('/sync/push', { method: 'POST', body: { token, passphrase } });
+      toast('Config berhasil di-push ke cloud');
+      renderSettings();
+    } catch (e) { toast('Gagal push: ' + e.message); }
+  });
+  document.getElementById('sync-pull').addEventListener('click', async () => {
+    const token = document.getElementById('sync-token').value.trim();
+    const passphrase = document.getElementById('sync-passphrase').value;
+    if (!token || !passphrase) return toast('Isi token dan passphrase dulu');
+    if (!confirm('Ini bakal timpa config lokal yang overlap. Lanjut?')) return;
+    try {
+      await api('/sync/pull', { method: 'POST', body: { token, passphrase } });
+      toast('Config berhasil di-pull dari cloud');
+    } catch (e) { toast('Gagal pull: ' + e.message); }
+  });
+  document.getElementById('sync-link').addEventListener('click', async () => {
+    const gistId = document.getElementById('sync-link-id').value.trim();
+    if (!gistId) return toast('Isi gist ID dulu');
+    await api('/sync/link', { method: 'POST', body: { gistId } });
+    toast('Terhubung ke gist. Sekarang klik "Pull dari cloud".');
+    renderSettings();
   });
   document.getElementById('export-btn').addEventListener('click', async () => {
     const data = await api('/export');

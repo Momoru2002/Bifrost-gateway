@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
 const { attemptChain, estimateCost, logRequest, getCombo } = require('./lib/router');
+const sync = require('./lib/sync');
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -217,7 +218,10 @@ api.get('/export', (req, res) => {
     providers: db.prepare('SELECT * FROM providers').all(),
     accounts: db.prepare('SELECT * FROM accounts').all(),
     combos: db.prepare('SELECT * FROM combos').all(),
-    settings: db.prepare('SELECT * FROM settings').all()
+    // gateway_key is per-machine auth for this gateway instance — importing
+    // it elsewhere would silently break whatever's already authenticating
+    // there, so it's deliberately left out of both export paths.
+    settings: db.prepare("SELECT * FROM settings WHERE key != 'gateway_key'").all()
   });
 });
 api.post('/import', (req, res) => {
@@ -225,10 +229,77 @@ api.post('/import', (req, res) => {
   const tx = db.transaction(() => {
     for (const p of providers) db.prepare('INSERT OR REPLACE INTO providers (id, name, kind, base_url, enabled, created_at) VALUES (@id, @name, @kind, @base_url, @enabled, @created_at)').run(p);
     for (const a of accounts) db.prepare('INSERT OR REPLACE INTO accounts (id, provider_id, label, api_key, enabled, cooldown_until, last_used_at, created_at) VALUES (@id, @provider_id, @label, @api_key, @enabled, @cooldown_until, @last_used_at, @created_at)').run(a);
-    for (const c of combos) db.prepare('INSERT OR REPLACE INTO combos (id, name, steps_json, is_default, created_at) VALUES (@id, @name, @steps_json, @is_default, @created_at)').run(c);
+    for (const c of combos) db.prepare('INSERT OR REPLACE INTO combos (id, name, steps_json, is_default, strategy, created_at) VALUES (@id, @name, @steps_json, @is_default, @strategy, @created_at)').run({ strategy: 'ordered', ...c });
     for (const s of settings) db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (@key, @value_json)').run(s);
   });
   tx();
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------
+// Cloud sync via a private GitHub Gist the user owns. The config is
+// AES-256-GCM encrypted with the user's passphrase *before* it leaves this
+// machine, so the plaintext (including provider API keys) never touches
+// GitHub. Neither the GitHub token nor the passphrase is ever persisted —
+// both are supplied fresh on each push/pull and used only in-memory for
+// that one request. Only the resulting gist ID is remembered locally, so
+// repeat syncs update the same gist instead of creating new ones.
+// ---------------------------------------------------------------------
+api.get('/sync/status', (req, res) => {
+  res.json({
+    gistId: getSetting('sync_gist_id', null),
+    lastSyncedAt: getSetting('sync_last_at', null)
+  });
+});
+
+api.post('/sync/push', async (req, res) => {
+  const { token, passphrase } = req.body;
+  if (!token || !passphrase) return res.status(400).json({ error: 'token and passphrase are required' });
+  try {
+    const exportData = {
+      providers: db.prepare('SELECT * FROM providers').all(),
+      accounts: db.prepare('SELECT * FROM accounts').all(),
+      combos: db.prepare('SELECT * FROM combos').all(),
+      settings: db.prepare("SELECT * FROM settings WHERE key NOT LIKE 'sync_%' AND key != 'gateway_key'").all()
+    };
+    const blob = sync.encrypt(exportData, passphrase);
+    const existingGistId = getSetting('sync_gist_id', null);
+    const gistId = await sync.pushToGist({ token, gistId: existingGistId, encryptedBlob: blob });
+    setSetting('sync_gist_id', gistId);
+    setSetting('sync_last_at', new Date().toISOString());
+    res.json({ ok: true, gistId, url: `https://gist.github.com/${gistId}` });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+api.post('/sync/pull', async (req, res) => {
+  const { token, passphrase } = req.body;
+  if (!token || !passphrase) return res.status(400).json({ error: 'token and passphrase are required' });
+  const gistId = getSetting('sync_gist_id', null);
+  if (!gistId) return res.status(400).json({ error: 'No gist linked yet on this machine — push from the machine that has your config first' });
+  try {
+    const blob = await sync.pullFromGist({ token, gistId });
+    const data = sync.decrypt(blob, passphrase);
+    const tx = db.transaction(() => {
+      for (const p of data.providers || []) db.prepare('INSERT OR REPLACE INTO providers (id, name, kind, base_url, enabled, created_at) VALUES (@id, @name, @kind, @base_url, @enabled, @created_at)').run(p);
+      for (const a of data.accounts || []) db.prepare('INSERT OR REPLACE INTO accounts (id, provider_id, label, api_key, enabled, cooldown_until, last_used_at, created_at) VALUES (@id, @provider_id, @label, @api_key, @enabled, @cooldown_until, @last_used_at, @created_at)').run(a);
+      for (const c of data.combos || []) db.prepare('INSERT OR REPLACE INTO combos (id, name, steps_json, is_default, strategy, created_at) VALUES (@id, @name, @steps_json, @is_default, @strategy, @created_at)').run({ strategy: 'ordered', ...c });
+      for (const s of data.settings || []) db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (@key, @value_json)').run(s);
+    });
+    tx();
+    setSetting('sync_last_at', new Date().toISOString());
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Allows linking to a gist created on another machine, before the first pull.
+api.post('/sync/link', (req, res) => {
+  const { gistId } = req.body;
+  if (!gistId) return res.status(400).json({ error: 'gistId required' });
+  setSetting('sync_gist_id', gistId);
   res.json({ ok: true });
 });
 
