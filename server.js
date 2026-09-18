@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 8787;
 // silently spend your provider credits. Generated on first boot.
 // ---------------------------------------------------------------------
 if (!getSetting('gateway_key')) {
-  setSetting('gateway_key', `nr-${nanoid(32)}`);
+  setSetting('gateway_key', `bf-${nanoid(32)}`);
 }
 function requireGatewayKey(req, res, next) {
   const auth = req.headers.authorization || '';
@@ -30,7 +30,7 @@ function requireGatewayKey(req, res, next) {
 // OpenAI-SDK-based tool at http://localhost:8787/v1
 // ---------------------------------------------------------------------
 app.post('/v1/chat/completions', requireGatewayKey, async (req, res) => {
-  const comboId = req.query.combo || req.header('x-nrouter-combo') || undefined;
+  const comboId = req.query.combo || req.header('x-bifrost-combo') || undefined;
   const body = req.body;
 
   let attempt;
@@ -121,7 +121,7 @@ const api = express.Router();
 
 api.get('/gateway-key', (req, res) => res.json({ key: getSetting('gateway_key') }));
 api.post('/gateway-key/regenerate', (req, res) => {
-  const key = `nr-${nanoid(32)}`;
+  const key = `bf-${nanoid(32)}`;
   setSetting('gateway_key', key);
   res.json({ key });
 });
@@ -240,7 +240,7 @@ app.use('/api', api);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
-  console.log(`nrouter gateway listening on http://localhost:${PORT}`);
+  console.log(`bifrost gateway listening on http://localhost:${PORT}`);
   console.log(`dashboard:            http://localhost:${PORT}`);
   console.log(`OpenAI-compatible base: http://localhost:${PORT}/v1`);
   console.log(`gateway key:           ${getSetting('gateway_key')}`);

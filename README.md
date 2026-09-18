@@ -1,4 +1,4 @@
-# nrouter
+# Bifrost
 
 Local AI routing gateway. Puts one OpenAI-compatible endpoint
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
@@ -58,7 +58,7 @@ is exhausted.
 
 ## Data & security notes
 
-- `data/nrouter.sqlite` holds your provider API keys in plaintext. It's
+- `data/bifrost.sqlite` holds your provider API keys in plaintext. It's
   git-ignored by default — **do not** remove that from `.gitignore` and
   commit it.
 - Export (Settings tab) also contains plaintext keys — treat exported
