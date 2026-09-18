@@ -127,15 +127,19 @@ async function renderProviders() {
           <button class="btn small danger del-provider" data-id="${p.id}">Hapus</button>
         </div>
       </div>
-      ${p.accounts.map((a) => `
+      ${p.accounts.map((a) => {
+        const cooldownMs = a.cooldown_until ? new Date(a.cooldown_until) - new Date() : 0;
+        const onCooldown = cooldownMs > 0;
+        return `
         <div class="account-row">
-          <span>${a.label} ${a.cooldown_until && new Date(a.cooldown_until) > new Date() ? '<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown</span>' : ''}</span>
+          <span>${a.label} ${onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}</span>
           <span class="row">
-            <span class="status-dot ${a.enabled ? 'ok' : 'error'}"></span>
+            <span class="status-dot ${!a.enabled ? 'error' : onCooldown ? 'warn' : 'ok'}"></span>
             <button class="btn small danger del-account" data-id="${a.id}">Hapus</button>
           </span>
         </div>
-      `).join('') || '<div class="empty" style="padding:10px 0">Belum ada account/API key.</div>'}
+      `;
+      }).join('') || '<div class="empty" style="padding:10px 0">Belum ada account/API key.</div>'}
       <form class="add-account-form" data-provider="${p.id}" style="margin-top:12px">
         <div class="row">
           <input name="label" placeholder="label (mis. akun-1)" required style="flex:1" />
