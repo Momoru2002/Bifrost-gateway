@@ -188,12 +188,19 @@ async function renderCombos() {
       <form id="combo-form">
         <label>Nama route</label>
         <input name="name" placeholder="mis. default-coding" required />
-        <label>Tambah langkah fallback</label>
+        <label>Strategi</label>
+        <select name="strategy" id="strategy-select">
+          <option value="ordered">Ordered fallback — coba sesuai urutan langkah</option>
+          <option value="cost">Least cost — coba yang termurah dulu, fallback ke lebih mahal</option>
+          <option value="weighted">Weighted random — sebar beban sesuai bobot tiap langkah</option>
+        </select>
+        <label>Tambah langkah</label>
         <div class="row">
           <select id="step-provider" style="flex:1">
             ${providers.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')}
           </select>
           <input id="step-model" placeholder="nama model, mis. gpt-4o-mini" style="flex:1" />
+          <input id="step-weight" type="number" min="1" value="1" placeholder="bobot" style="flex:0 0 70px; display:none" />
           <button type="button" id="add-step-btn" class="btn small">+ Langkah</button>
         </div>
         <div id="steps-preview" style="margin-top:12px"></div>
@@ -204,6 +211,10 @@ async function renderCombos() {
     <div id="combo-list"></div>
   `;
 
+  document.getElementById('strategy-select').addEventListener('change', (e) => {
+    document.getElementById('step-weight').style.display = e.target.value === 'weighted' ? 'block' : 'none';
+  });
+
   if (!providers.length) {
     document.querySelector('#combo-form').innerHTML = `<div class="empty">Tambah provider dulu di tab Providers sebelum bikin route.</div>`;
   }
@@ -212,7 +223,7 @@ async function renderCombos() {
   const preview = document.getElementById('steps-preview');
   function drawPreview() {
     preview.innerHTML = comboSteps.map((s, i) => `
-      <span class="step-chip"><span class="step-order">${i + 1}</span> ${providerName(providers, s.provider_id)} / ${s.model}
+      <span class="step-chip"><span class="step-order">${i + 1}</span> ${providerName(providers, s.provider_id)} / ${s.model}${s.weight && s.weight !== 1 ? ` <span style="color:var(--text-dim)">(bobot ${s.weight})</span>` : ''}
         <button type="button" data-i="${i}" class="rm-step" style="background:none;border:none;color:var(--text-dim);cursor:pointer">✕</button>
       </span>
     `).join(' ');
@@ -226,7 +237,9 @@ async function renderCombos() {
     const providerId = document.getElementById('step-provider').value;
     const model = document.getElementById('step-model').value.trim();
     if (!providerId || !model) return toast('Isi model dulu');
-    comboSteps.push({ provider_id: providerId, model });
+    const strategy = document.getElementById('strategy-select').value;
+    const weight = strategy === 'weighted' ? (parseInt(document.getElementById('step-weight').value) || 1) : undefined;
+    comboSteps.push(weight ? { provider_id: providerId, model, weight } : { provider_id: providerId, model });
     document.getElementById('step-model').value = '';
     drawPreview();
   });
@@ -235,22 +248,28 @@ async function renderCombos() {
     e.preventDefault();
     if (!comboSteps.length) return toast('Tambah minimal 1 langkah fallback');
     const fd = new FormData(e.target);
-    await api('/combos', { method: 'POST', body: { name: fd.get('name'), steps: comboSteps, is_default: fd.get('is_default') === 'on' } });
+    await api('/combos', { method: 'POST', body: { name: fd.get('name'), steps: comboSteps, strategy: fd.get('strategy'), is_default: fd.get('is_default') === 'on' } });
     toast('Route disimpan');
     renderCombos();
   });
 
   const combos = await api('/combos');
   const list = document.getElementById('combo-list');
+  const STRATEGY_LABEL = { ordered: 'Ordered fallback', cost: 'Least cost', weighted: 'Weighted random' };
   list.innerHTML = combos.length ? combos.map((c) => `
     <div class="panel">
       <div class="row-between">
-        <div class="row"><strong>${c.name}</strong> ${c.is_default ? '<span class="badge" style="color:var(--signal);border-color:var(--signal-dim)">default</span>' : ''}</div>
+        <div class="row">
+          <strong>${c.name}</strong>
+          <span class="badge">${STRATEGY_LABEL[c.strategy] || 'Ordered fallback'}</span>
+          ${c.is_default ? '<span class="badge" style="color:var(--signal);border-color:var(--signal-dim)">default</span>' : ''}
+        </div>
         <button class="btn small danger del-combo" data-id="${c.id}">Hapus</button>
       </div>
       <div style="margin-top:10px">
-        ${c.steps.map((s, i) => `<span class="step-chip"><span class="step-order">${i + 1}</span> ${providerName(providers, s.provider_id)} / ${s.model}</span>`).join(' → ')}
+        ${c.steps.map((s, i) => `<span class="step-chip"><span class="step-order">${i + 1}</span> ${providerName(providers, s.provider_id)} / ${s.model}${s.weight && s.weight !== 1 ? ` <span style="color:var(--text-dim)">(bobot ${s.weight})</span>` : ''}</span>`).join(' ')}
       </div>
+      ${c.strategy && c.strategy !== 'ordered' ? `<div style="color:var(--text-dim);font-size:12px;margin-top:8px">Urutan aktual per-request bisa beda dari daftar di atas — ${c.strategy === 'cost' ? 'termurah dicoba duluan' : 'dipilih random sesuai bobot'}.</div>` : ''}
     </div>
   `).join('') : `<div class="empty">Belum ada route.</div>`;
 

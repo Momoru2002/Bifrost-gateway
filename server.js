@@ -172,19 +172,19 @@ api.get('/combos', (req, res) => {
   res.json(rows.map((r) => ({ ...r, steps: JSON.parse(r.steps_json) })));
 });
 api.post('/combos', (req, res) => {
-  const { name, steps, is_default } = req.body;
+  const { name, steps, is_default, strategy } = req.body;
   if (!name || !Array.isArray(steps) || !steps.length) return res.status(400).json({ error: 'name and steps[] required' });
   const id = nanoid();
   if (is_default) db.prepare('UPDATE combos SET is_default = 0').run();
-  db.prepare('INSERT INTO combos (id, name, steps_json, is_default) VALUES (?, ?, ?, ?)')
-    .run(id, name, JSON.stringify(steps), is_default ? 1 : 0);
+  db.prepare('INSERT INTO combos (id, name, steps_json, is_default, strategy) VALUES (?, ?, ?, ?, ?)')
+    .run(id, name, JSON.stringify(steps), is_default ? 1 : 0, strategy || 'ordered');
   res.json({ id });
 });
 api.patch('/combos/:id', (req, res) => {
-  const { name, steps, is_default } = req.body;
+  const { name, steps, is_default, strategy } = req.body;
   if (is_default) db.prepare('UPDATE combos SET is_default = 0').run();
-  db.prepare('UPDATE combos SET name = COALESCE(?, name), steps_json = COALESCE(?, steps_json), is_default = COALESCE(?, is_default) WHERE id = ?')
-    .run(name, steps ? JSON.stringify(steps) : undefined, is_default === undefined ? undefined : (is_default ? 1 : 0), req.params.id);
+  db.prepare('UPDATE combos SET name = COALESCE(?, name), steps_json = COALESCE(?, steps_json), is_default = COALESCE(?, is_default), strategy = COALESCE(?, strategy) WHERE id = ?')
+    .run(name, steps ? JSON.stringify(steps) : undefined, is_default === undefined ? undefined : (is_default ? 1 : 0), strategy, req.params.id);
   res.json({ ok: true });
 });
 api.delete('/combos/:id', (req, res) => {
