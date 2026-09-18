@@ -61,12 +61,8 @@ app.post('/v1/chat/completions', requireGatewayKey, async (req, res) => {
       for (const evt of events) {
         const dataLine = evt.split('\n').find((l) => l.startsWith('data:'));
         if (!dataLine) continue;
-        if (adapter.kind === 'openai') {
-          res.write(dataLine + '\n\n');
-        } else if (adapter.translateStreamLine) {
-          const out = adapter.translateStreamLine(dataLine, ctx);
-          if (out) res.write(out);
-        }
+        const out = adapter.translateStreamLine ? adapter.translateStreamLine(dataLine, ctx) : null;
+        if (out) res.write(out);
       }
     });
     upstream.body.on('end', () => {
