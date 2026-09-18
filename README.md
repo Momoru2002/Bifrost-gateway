@@ -30,6 +30,11 @@ cp .env.example .env
 npm start
 ```
 
+Requires **Node 22.5+** (24+ recommended). No native/build toolchain
+needed — `data/bifrost.sqlite` runs on Node's built-in `node:sqlite`, not
+a compiled dependency, so `npm install` works out of the box on Windows,
+macOS, and Linux without Visual Studio Build Tools or similar.
+
 Open `http://localhost:8787` for the dashboard. On first boot the server
 generates a **gateway key** (shown in the terminal and in Settings) — this
 is a local secret, separate from your provider API keys, that authenticates
@@ -123,4 +128,5 @@ already authenticating against the first one.
 
 ## Stack
 
-Express + better-sqlite3, vanilla JS dashboard (no build step). Node 18+.
+Express + Node's built-in `node:sqlite`, vanilla JS dashboard (no build
+step). Node 22.5+ (24+ recommended).
