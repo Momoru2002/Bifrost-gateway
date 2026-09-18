@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>nrouter — local AI gateway</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">n⁄</span>
+      <span class="brand-name">nrouter</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="providers">Providers</button>
+      <button data-tab="combos">Routes</button>
+      <button data-tab="logs">Logs</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main id="view"></main>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
