@@ -14,11 +14,12 @@ scripts) at the gateway instead of a single provider directly.
 ## Status
 
 MVP+. Working: OpenAI / Anthropic / Gemini adapters (chat, streaming,
-non-streaming), multi-account fallback, rate-limit-aware cooldowns (reads
-each provider's actual `retry-after` / reset headers instead of guessing),
-weighted and least-cost routing strategies, cost-estimate logging,
-dashboard. Not yet built: true cloud sync (multi-device), OAuth-based
-provider login. See [Roadmap](#roadmap).
+non-streaming) with real usage/token capture on both streaming and
+non-streaming calls, multi-account fallback, rate-limit-aware cooldowns
+(reads each provider's actual `retry-after` / reset headers instead of
+guessing), weighted and least-cost routing strategies, cost-estimate
+logging, dashboard. Not yet built: true cloud sync (multi-device),
+OAuth-based provider login. See [Roadmap](#roadmap).
 
 ## Quick start
 
@@ -93,8 +94,8 @@ on every step is exhausted.
 
 - [x] Per-provider rate-limit detection (reads real retry-after/reset signals)
 - [x] Weighted / least-cost routing strategies
-- [ ] Streaming usage capture for OpenAI-kind providers (currently best
-      effort; Anthropic/Gemini streams already report usage)
+- [x] Streaming usage capture (all three adapters now report real token
+      counts for streamed requests, not just non-streaming ones)
 - [ ] True multi-device cloud sync (today: manual export/import JSON)
 - [ ] Provider OAuth login flows (today: paste an API key)
 
