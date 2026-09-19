@@ -10,6 +10,14 @@ const anthropicFrontend = require('./lib/anthropic_frontend');
 const app = express();
 app.use(express.json({ limit: '25mb' }));
 
+// Basic security headers on every response.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
 const PORT = process.env.PORT || 8787;
 
 // ---------------------------------------------------------------------
@@ -62,10 +70,36 @@ function clearSessionCookie(res) {
 }
 
 const authApi = express.Router();
+
+// --- In-memory rate limiter (per IP, sliding window) --------------------
+// Applied to the auth endpoints so the dashboard password can't just be
+// brute-forced. In-memory is fine here: a restart resetting the counters
+// is an acceptable tradeoff for a single-process local tool, and this
+// only needs to survive within one server lifetime.
+const rateLimitBuckets = new Map();
+function rateLimit({ windowMs, max }) {
+  return (req, res, next) => {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    let bucket = rateLimitBuckets.get(key);
+    if (!bucket || bucket.resetAt < now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateLimitBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      const retryAfterSec = Math.ceil((bucket.resetAt - now) / 1000);
+      res.setHeader('Retry-After', retryAfterSec);
+      return res.status(429).json({ error: `Too many attempts — try again in ${retryAfterSec}s` });
+    }
+    next();
+  };
+}
+const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 authApi.get('/status', (req, res) => {
   res.json({ needsSetup: !getSetting('dashboard_password_hash'), authenticated: req.session.authenticated });
 });
-authApi.post('/setup', (req, res) => {
+authApi.post('/setup', authRateLimit, (req, res) => {
   if (getSetting('dashboard_password_hash')) return res.status(400).json({ error: 'Already set up — use /login instead' });
   const { password } = req.body;
   if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -73,7 +107,7 @@ authApi.post('/setup', (req, res) => {
   setSessionCookie(res);
   res.json({ ok: true });
 });
-authApi.post('/login', (req, res) => {
+authApi.post('/login', authRateLimit, (req, res) => {
   const hash = getSetting('dashboard_password_hash');
   if (!hash) return res.status(400).json({ error: 'No password set up yet' });
   const { password } = req.body;
@@ -87,7 +121,7 @@ authApi.post('/logout', (req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
 });
-authApi.post('/change-password', (req, res) => {
+authApi.post('/change-password', authRateLimit, (req, res) => {
   if (!req.session.authenticated) return res.status(401).json({ error: 'Not authenticated' });
   const hash = getSetting('dashboard_password_hash');
   const { currentPassword, newPassword } = req.body;
@@ -305,7 +339,9 @@ api.post('/gateway-key/regenerate', (req, res) => {
 
 api.get('/providers', (req, res) => {
   const providers = db.prepare('SELECT * FROM providers ORDER BY created_at').all();
-  const accounts = db.prepare('SELECT id, provider_id, label, enabled, cooldown_until, last_used_at FROM accounts').all();
+  // key_preview is the last 4 characters only — enough to tell accounts
+  // apart in the UI without ever sending the real key back to the browser.
+  const accounts = db.prepare("SELECT id, provider_id, label, enabled, cooldown_until, last_used_at, SUBSTR(api_key, -4) as key_preview FROM accounts").all();
   res.json(providers.map((p) => ({ ...p, accounts: accounts.filter((a) => a.provider_id === p.id) })));
 });
 api.post('/providers', (req, res) => {

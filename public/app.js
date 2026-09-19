@@ -140,7 +140,7 @@ async function renderProviders() {
         const onCooldown = cooldownMs > 0;
         return `
         <div class="account-row" data-account-row="${a.id}">
-          <span>${a.label} ${onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}</span>
+          <span>${a.label} <span style="color:var(--text-dim);font-family:var(--mono);font-size:11.5px">····${a.key_preview || '????'}</span> ${onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}</span>
           <span class="row">
             <span class="test-result" data-test-result="${a.id}" style="font-size:11.5px;color:var(--text-dim)"></span>
             <button class="btn small test-account" data-id="${a.id}" data-kind="${p.kind}">Test</button>
