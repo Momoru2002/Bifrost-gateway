@@ -69,6 +69,17 @@ curl http://localhost:8787/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"hi"}],"stream":false}'
 ```
 
+`/v1/embeddings` works the same way (OpenAI and Gemini routes only —
+Anthropic doesn't offer an embeddings API, so a route pointed only at
+Anthropic will return a clear error rather than a result):
+
+```bash
+curl http://localhost:8787/v1/embeddings \
+  -H "Authorization: Bearer <your-gateway-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"hello world"}'
+```
+
 ## Talking to Claude Code
 
 Claude Code speaks the Anthropic Messages API natively (`/v1/messages`,
@@ -191,8 +202,14 @@ already authenticating against the first one.
 - [x] Provider catalog/presets for common OpenAI-compatible providers
 - [x] Live-refreshing Logs tab, daily usage chart on Overview
 - [x] Rate-limited dashboard login, key preview, basic security headers
-- [ ] Provider OAuth login flows (today: paste an API key)
-- [ ] Multi-modal endpoints (images, embeddings, audio/TTS)
+- [x] `/v1/embeddings` (OpenAI + Gemini — Anthropic has no embeddings API)
+- [ ] Provider OAuth login flows — **not generically buildable**: this
+      needs Bifrost registered as an OAuth app with each provider
+      individually via that provider's own developer console, which only
+      the account owner can do. Documented gap, not planned.
+- [ ] Image generation / audio-TTS endpoints (out of scope for a
+      coding-tool-facing gateway; embeddings covered the realistic part
+      of "multi-modal")
 - [ ] Token/prompt compression for cost savings on long tool-heavy sessions
 - [ ] Provider catalog/presets for common OpenAI-compatible providers
       (Groq, Together, DeepSeek, etc. — today you type the base URL by hand)
