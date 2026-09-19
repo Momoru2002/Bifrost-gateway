@@ -35,11 +35,17 @@ needed — `data/bifrost.sqlite` runs on Node's built-in `node:sqlite`, not
 a compiled dependency, so `npm install` works out of the box on Windows,
 macOS, and Linux without Visual Studio Build Tools or similar.
 
-Open `http://localhost:8787` for the dashboard. On first boot the server
-generates a **gateway key** (shown in the terminal and in Settings) — this
-is a local secret, separate from your provider API keys, that authenticates
-requests to your gateway so nothing else on your machine can spend your
-credits silently.
+Open `http://localhost:8787` for the dashboard. **First time you open it,
+you'll be asked to set a dashboard password** — this protects the
+management API (`/api/*`), which can read every provider API key you add.
+Forgot it? `npm run reset-password` clears it without touching your
+providers/routes/logs.
+
+Separately, on first server boot the process also generates a **gateway
+key** (shown in the terminal and in Settings once you're logged in) — a
+local secret, distinct from your provider API keys *and* from the
+dashboard password, that authenticates requests to the gateway itself
+(`/v1/*`) so nothing else on your machine can spend your credits silently.
 
 1. **Providers tab** — add a provider (OpenAI / Anthropic / Gemini / any
    OpenAI-compatible endpoint), then add one or more accounts (API keys)
@@ -107,15 +113,19 @@ already authenticating against the first one.
 - `data/bifrost.sqlite` holds your provider API keys in plaintext. It's
   git-ignored by default — **do not** remove that from `.gitignore` and
   commit it.
+- The dashboard (`/api/*`) is behind a password (set on first run) —
+  without it, anyone who can reach port 8787 could read every provider
+  key you've added. Sessions are signed cookies with a 7-day expiry.
 - Export (Settings tab) also contains plaintext keys — treat exported
   JSON files the same way as a `.env` file with secrets in it.
 - Cloud sync encrypts before upload (see above), but the strength of that
   protection is only as good as your passphrase — use a real one, not
   "1234".
-- This gateway has no built-in HTTPS or external auth beyond the gateway
-  key. It's designed to run on `localhost`; don't expose port 8787
-  directly to the internet without putting a reverse proxy + real auth in
-  front of it.
+- This gateway has no built-in HTTPS. It's designed to run on
+  `localhost`; don't expose port 8787 directly to the internet without
+  putting a reverse proxy + TLS in front of it — the dashboard password
+  protects against casual access, not against being placed on the open
+  internet unencrypted.
 
 ## Roadmap
 
@@ -124,6 +134,13 @@ already authenticating against the first one.
 - [x] Streaming usage capture (all three adapters now report real token
       counts for streamed requests, not just non-streaming ones)
 - [x] Cloud sync (encrypted, via a private GitHub Gist you own)
+- [x] Dashboard authentication (password + session, protects `/api/*`)
+- [ ] Native Anthropic `/v1/messages` endpoint (so Claude Code / other
+      Anthropic-protocol tools can talk to Bifrost directly, including
+      tool-call translation — currently Bifrost only speaks the
+      OpenAI-compatible surface)
+- [ ] "Test connection" button per account (validate a key when it's
+      added, instead of only finding out when a real request fails)
 - [ ] Provider OAuth login flows (today: paste an API key)
 
 ## Stack
