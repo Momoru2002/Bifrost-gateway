@@ -30,6 +30,27 @@ async function api(path, opts = {}) {
 const KIND_LABEL = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', openai_compatible: 'OpenAI-compatible' };
 const DEFAULT_TEST_MODEL = { openai: 'gpt-4o-mini', anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.0-flash', openai_compatible: '' };
 
+// Curated presets for the "OpenAI-compatible" provider kind, so adding a
+// well-known provider is pick-from-a-list instead of having to already
+// know its exact base URL. Not exhaustive — just the common ones people
+// actually reach for; anything else still works via "Custom".
+const PROVIDER_CATALOG = [
+  { name: 'Groq', base_url: 'https://api.groq.com/openai' },
+  { name: 'Together AI', base_url: 'https://api.together.xyz' },
+  { name: 'DeepSeek', base_url: 'https://api.deepseek.com' },
+  { name: 'Fireworks AI', base_url: 'https://api.fireworks.ai/inference' },
+  { name: 'Mistral', base_url: 'https://api.mistral.ai' },
+  { name: 'OpenRouter', base_url: 'https://openrouter.ai/api' },
+  { name: 'Perplexity', base_url: 'https://api.perplexity.ai' },
+  { name: 'xAI (Grok)', base_url: 'https://api.x.ai' },
+  { name: 'Moonshot / Kimi', base_url: 'https://api.moonshot.cn' },
+  { name: 'Cerebras', base_url: 'https://api.cerebras.ai' },
+  { name: 'SiliconFlow', base_url: 'https://api.siliconflow.cn' },
+  { name: 'Novita AI', base_url: 'https://api.novita.ai/openai' },
+  { name: 'LM Studio (local)', base_url: 'http://localhost:1234' },
+  { name: 'Ollama (local)', base_url: 'http://localhost:11434/v1' }
+];
+
 // ---------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------
@@ -42,16 +63,42 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 });
 
 function render(tab) {
+  // Only the Logs tab auto-refreshes; leaving it should stop the interval
+  // so other tabs aren't silently re-fetching in the background.
+  if (logsRefreshInterval) { clearInterval(logsRefreshInterval); logsRefreshInterval = null; }
   const renderers = { overview: renderOverview, providers: renderProviders, combos: renderCombos, logs: renderLogs, settings: renderSettings };
   (renderers[tab] || renderOverview)();
 }
+let logsRefreshInterval = null;
 
 // ---------------------------------------------------------------------
 // Overview
 // ---------------------------------------------------------------------
+function dailyChartSvg(daily) {
+  if (!daily.length) return `<div class="empty">Belum ada data. Chart muncul setelah ada request.</div>`;
+  const W = 720, H = 160, PAD = 24;
+  const max = Math.max(1, ...daily.map((d) => d.requests));
+  const barW = (W - PAD * 2) / daily.length;
+  const bars = daily.map((d, i) => {
+    const h = (d.requests / max) * (H - PAD * 2);
+    const x = PAD + i * barW;
+    const y = H - PAD - h;
+    const hasErrors = d.errors > 0;
+    return `<rect x="${x + 2}" y="${y}" width="${Math.max(barW - 4, 2)}" height="${h}" fill="${hasErrors ? 'var(--warn)' : 'var(--signal)'}" rx="2">
+      <title>${d.day}: ${d.requests} request${d.errors ? `, ${d.errors} error` : ''}</title>
+    </rect>`;
+  }).join('');
+  const labels = daily.map((d, i) => {
+    if (daily.length > 10 && i % 2 !== 0) return '';
+    const x = PAD + i * barW + barW / 2;
+    return `<text x="${x}" y="${H - 6}" font-size="9" fill="var(--text-dim)" text-anchor="middle" font-family="var(--mono)">${d.day.slice(5)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:180px">${bars}${labels}</svg>`;
+}
+
 async function renderOverview() {
   view.innerHTML = `<h1>Overview</h1><p class="subhead">Status jaringan gateway lu, hari ini.</p><div id="ov-body">Loading…</div>`;
-  const [stats, providers] = await Promise.all([api('/stats'), api('/providers')]);
+  const [stats, providers, daily] = await Promise.all([api('/stats'), api('/providers'), api('/stats/daily?days=14')]);
   const t = stats.totals || {};
   const activeAccounts = providers.reduce((n, p) => n + p.accounts.filter((a) => a.enabled).length, 0);
 
@@ -65,6 +112,10 @@ async function renderOverview() {
       <div class="stat"><div class="label">Providers configured</div><div class="value">${providers.length}</div></div>
       <div class="stat"><div class="label">Active accounts</div><div class="value">${activeAccounts}</div></div>
       <div class="stat"><div class="label">Tokens in / out</div><div class="value" style="font-size:16px">${t.input_tokens || 0} / ${t.output_tokens || 0}</div></div>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <h2>Requests per hari (14 hari terakhir)</h2>
+      ${dailyChartSvg(daily)}
     </div>
     <div class="panel" style="margin-top:18px">
       <h2>Usage per provider</h2>
@@ -99,6 +150,11 @@ async function renderProviders() {
           <option value="openai_compatible">OpenAI-compatible lain (Groq, Together, local vLLM, dst.)</option>
         </select>
         <div id="base-url-field" style="display:none">
+          <label>Provider preset</label>
+          <select id="catalog-select">
+            <option value="">— Custom (masukin base URL manual) —</option>
+            ${PROVIDER_CATALOG.map((c) => `<option value="${c.base_url}" data-name="${c.name}">${c.name}</option>`).join('')}
+          </select>
           <label>Base URL</label>
           <input name="base_url" placeholder="https://api.groq.com/openai" />
         </div>
@@ -111,6 +167,13 @@ async function renderProviders() {
   const form = document.getElementById('add-provider-form');
   form.kind.addEventListener('change', () => {
     document.getElementById('base-url-field').style.display = form.kind.value === 'openai_compatible' ? 'block' : 'none';
+  });
+  document.getElementById('catalog-select').addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (opt.value) {
+      form.base_url.value = opt.value;
+      if (!form.name.value) form.name.value = opt.dataset.name;
+    }
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -138,13 +201,19 @@ async function renderProviders() {
       ${p.accounts.map((a) => {
         const cooldownMs = a.cooldown_until ? new Date(a.cooldown_until) - new Date() : 0;
         const onCooldown = cooldownMs > 0;
+        const circuitOpen = onCooldown && a.consecutive_failures >= 5;
         return `
         <div class="account-row" data-account-row="${a.id}">
-          <span>${a.label} <span style="color:var(--text-dim);font-family:var(--mono);font-size:11.5px">····${a.key_preview || '????'}</span> ${onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}</span>
+          <span>${a.label} <span style="color:var(--text-dim);font-family:var(--mono);font-size:11.5px">····${a.key_preview || '????'}</span>
+            ${circuitOpen
+              ? `<span class="badge" style="color:var(--danger);border-color:var(--danger-dim)">circuit breaker OPEN (${Math.ceil(cooldownMs / 60000)}m)</span>`
+              : onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}
+            ${!circuitOpen && a.consecutive_failures > 0 ? `<span style="color:var(--text-dim);font-size:11px"> (${a.consecutive_failures}/5 gagal beruntun)</span>` : ''}
+          </span>
           <span class="row">
             <span class="test-result" data-test-result="${a.id}" style="font-size:11.5px;color:var(--text-dim)"></span>
             <button class="btn small test-account" data-id="${a.id}" data-kind="${p.kind}">Test</button>
-            <span class="status-dot ${!a.enabled ? 'error' : onCooldown ? 'warn' : 'ok'}"></span>
+            <span class="status-dot ${!a.enabled ? 'error' : circuitOpen ? 'error' : onCooldown ? 'warn' : 'ok'}"></span>
             <button class="btn small danger del-account" data-id="${a.id}">Hapus</button>
           </span>
         </div>
@@ -234,7 +303,7 @@ async function renderCombos() {
           <select id="step-provider" style="flex:1">
             ${providers.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')}
           </select>
-          <input id="step-model" placeholder="nama model, mis. gpt-4o-mini" style="flex:1" />
+          <span id="step-model-wrapper" style="flex:1"><input id="step-model" placeholder="nama model, mis. gpt-4o-mini" style="width:100%" /></span>
           <input id="step-weight" type="number" min="1" value="1" placeholder="bobot" style="flex:0 0 70px; display:none" />
           <button type="button" id="add-step-btn" class="btn small">+ Langkah</button>
         </div>
@@ -252,6 +321,41 @@ async function renderCombos() {
 
   if (!providers.length) {
     document.querySelector('#combo-form').innerHTML = `<div class="empty">Tambah provider dulu di tab Providers sebelum bikin route.</div>`;
+  }
+
+  // Model dropdown: fetch the real model list for whichever provider is
+  // selected so people pick from what's actually available instead of
+  // typing an exact model name from memory. Falls back to a free-text
+  // input when the provider has no queryable model list (or none yet).
+  async function loadModelOptions() {
+    const providerId = document.getElementById('step-provider').value;
+    const wrapper = document.getElementById('step-model-wrapper');
+    if (!providerId) return;
+    wrapper.innerHTML = `<input id="step-model" placeholder="memuat model…" style="width:100%" disabled />`;
+    try {
+      const { models } = await api(`/providers/${providerId}/models`);
+      if (models && models.length) {
+        wrapper.innerHTML = `
+          <select id="step-model" style="width:100%">
+            ${models.map((m) => `<option value="${m}">${m}</option>`).join('')}
+            <option value="__custom__">Custom / ketik manual…</option>
+          </select>
+        `;
+        document.getElementById('step-model').addEventListener('change', (e) => {
+          if (e.target.value === '__custom__') {
+            wrapper.innerHTML = `<input id="step-model" placeholder="nama model" style="width:100%" />`;
+          }
+        });
+      } else {
+        wrapper.innerHTML = `<input id="step-model" placeholder="nama model (daftar model gak tersedia, ketik manual)" style="width:100%" />`;
+      }
+    } catch {
+      wrapper.innerHTML = `<input id="step-model" placeholder="nama model, mis. gpt-4o-mini" style="width:100%" />`;
+    }
+  }
+  if (providers.length) {
+    document.getElementById('step-provider').addEventListener('change', loadModelOptions);
+    loadModelOptions();
   }
 
   comboSteps = [];
@@ -321,26 +425,30 @@ function providerName(providers, id) {
 // Logs
 // ---------------------------------------------------------------------
 async function renderLogs() {
-  view.innerHTML = `<h1>Logs</h1><p class="subhead">100 request terakhir.</p><div id="log-body">Loading…</div>`;
-  const logs = await api('/logs?limit=100');
-  document.getElementById('log-body').innerHTML = logs.length ? `
-    <table>
-      <thead><tr><th>Waktu</th><th>Provider</th><th>Model</th><th>Status</th><th>Tokens</th><th>Cost</th><th>Latency</th></tr></thead>
-      <tbody>
-        ${logs.map((l) => `
-          <tr>
-            <td>${new Date(l.ts + 'Z').toLocaleTimeString()}</td>
-            <td>${l.provider_name || '-'}${l.account_label ? ' / ' + l.account_label : ''}</td>
-            <td>${l.model || '-'}</td>
-            <td><span class="status-dot ${l.status === 'success' ? 'ok' : 'error'}"></span>${l.status}</td>
-            <td>${l.input_tokens || 0}/${l.output_tokens || 0}</td>
-            <td>$${(l.cost_estimate || 0).toFixed(5)}</td>
-            <td>${l.latency_ms || 0}ms</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : `<div class="empty">Belum ada log request.</div>`;
+  view.innerHTML = `<h1>Logs</h1><p class="subhead">100 request terakhir. <span id="live-dot" style="color:var(--signal)">● live</span></p><div id="log-body">Loading…</div>`;
+  const draw = async () => {
+    const logs = await api('/logs?limit=100');
+    document.getElementById('log-body').innerHTML = logs.length ? `
+      <table>
+        <thead><tr><th>Waktu</th><th>Provider</th><th>Model</th><th>Status</th><th>Tokens</th><th>Cost</th><th>Latency</th></tr></thead>
+        <tbody>
+          ${logs.map((l) => `
+            <tr>
+              <td>${new Date(l.ts + 'Z').toLocaleTimeString()}</td>
+              <td>${l.provider_name || '-'}${l.account_label ? ' / ' + l.account_label : ''}</td>
+              <td>${l.model || '-'}</td>
+              <td><span class="status-dot ${l.status === 'success' ? 'ok' : 'error'}"></span>${l.status}</td>
+              <td>${l.input_tokens || 0}/${l.output_tokens || 0}</td>
+              <td>$${(l.cost_estimate || 0).toFixed(5)}</td>
+              <td>${l.latency_ms || 0}ms</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : `<div class="empty">Belum ada log request.</div>`;
+  };
+  await draw();
+  logsRefreshInterval = setInterval(draw, 4000);
 }
 
 // ---------------------------------------------------------------------

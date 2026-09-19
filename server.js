@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
-const { attemptChain, testAccount, estimateCost, logRequest, getCombo } = require('./lib/router');
+const { attemptChain, testAccount, listModelsForProvider, estimateCost, logRequest, getCombo } = require('./lib/router');
 const sync = require('./lib/sync');
 const auth = require('./lib/auth');
 const anthropicFrontend = require('./lib/anthropic_frontend');
@@ -341,7 +341,7 @@ api.get('/providers', (req, res) => {
   const providers = db.prepare('SELECT * FROM providers ORDER BY created_at').all();
   // key_preview is the last 4 characters only — enough to tell accounts
   // apart in the UI without ever sending the real key back to the browser.
-  const accounts = db.prepare("SELECT id, provider_id, label, enabled, cooldown_until, last_used_at, SUBSTR(api_key, -4) as key_preview FROM accounts").all();
+  const accounts = db.prepare("SELECT id, provider_id, label, enabled, cooldown_until, last_used_at, consecutive_failures, SUBSTR(api_key, -4) as key_preview FROM accounts").all();
   res.json(providers.map((p) => ({ ...p, accounts: accounts.filter((a) => a.provider_id === p.id) })));
 });
 api.post('/providers', (req, res) => {
@@ -378,6 +378,13 @@ api.post('/accounts/:id/test', async (req, res) => {
   if (!model) return res.status(400).json({ ok: false, error: 'model is required to test with' });
   const result = await testAccount({ provider, account, model });
   res.json(result);
+});
+api.get('/providers/:id/models', async (req, res) => {
+  const provider = db.prepare('SELECT * FROM providers WHERE id = ?').get(req.params.id);
+  if (!provider) return res.status(404).json({ error: 'Provider not found' });
+  const account = db.prepare('SELECT * FROM accounts WHERE provider_id = ? AND enabled = 1 LIMIT 1').get(provider.id);
+  const models = await listModelsForProvider(provider, account);
+  res.json({ models });
 });
 api.patch('/accounts/:id', (req, res) => {
   const { label, api_key, enabled } = req.body;
@@ -434,6 +441,18 @@ api.get('/stats', (req, res) => {
     GROUP BY provider_name
   `).all();
   res.json({ totals, byProvider });
+});
+api.get('/stats/daily', (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 14, 90);
+  const rows = db.prepare(`
+    SELECT date(ts) as day, COUNT(*) as requests, SUM(cost_estimate) as cost,
+           SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors
+    FROM request_logs
+    WHERE date(ts) >= date('now', ?)
+    GROUP BY date(ts)
+    ORDER BY day ASC
+  `).all(`-${days} days`);
+  res.json(rows);
 });
 
 // Local "sync": export/import the whole config (providers, accounts, combos,
