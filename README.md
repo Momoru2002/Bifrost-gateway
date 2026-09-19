@@ -149,6 +149,11 @@ already authenticating against the first one.
 - The dashboard (`/api/*`) is behind a password (set on first run) —
   without it, anyone who can reach port 8787 could read every provider
   key you've added. Sessions are signed cookies with a 7-day expiry.
+  Login, setup, and change-password are rate-limited (10 attempts / 15
+  min per IP) against brute-forcing that password.
+- Provider API keys are never sent back to the dashboard once saved —
+  the accounts listing only includes a `key_preview` (last 4 characters)
+  so accounts stay distinguishable in the UI.
 - Export (Settings tab) also contains plaintext keys — treat exported
   JSON files the same way as a `.env` file with secrets in it.
 - Cloud sync encrypts before upload (see above), but the strength of that
