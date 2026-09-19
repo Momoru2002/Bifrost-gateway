@@ -2,9 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
-const { attemptChain, estimateCost, logRequest, getCombo } = require('./lib/router');
+const { attemptChain, testAccount, estimateCost, logRequest, getCombo } = require('./lib/router');
 const sync = require('./lib/sync');
 const auth = require('./lib/auth');
+const anthropicFrontend = require('./lib/anthropic_frontend');
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -22,8 +23,12 @@ if (!getSetting('session_secret')) {
   setSetting('session_secret', nanoid(48));
 }
 function requireGatewayKey(req, res, next) {
+  // Accept both auth styles: `Authorization: Bearer <key>` (most
+  // OpenAI-SDK tools) and `x-api-key: <key>` (Anthropic-SDK tools like
+  // Claude Code, which is what ANTHROPIC_API_KEY gets sent as).
   const authHeader = req.headers.authorization || '';
-  const key = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const key = bearerKey || req.headers['x-api-key'] || null;
   if (key !== getSetting('gateway_key')) {
     return res.status(401).json({ error: { message: 'Invalid or missing gateway API key' } });
   }
@@ -189,6 +194,103 @@ app.get('/v1/models', requireGatewayKey, (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// Anthropic-native endpoint — point Claude Code (or anything else that
+// speaks the Anthropic Messages API rather than OpenAI's) at
+// http://localhost:8787/v1. Translates in both directions (including
+// tool-calling) around the exact same routing/fallback used above, so a
+// Claude-Code request can transparently be served by Gemini or OpenAI.
+// See lib/anthropic_frontend.js for the translation and its known gaps
+// (inline images aren't translated across providers yet).
+// ---------------------------------------------------------------------
+app.post('/v1/messages', requireGatewayKey, async (req, res) => {
+  const comboId = req.query.combo || req.header('x-bifrost-combo') || undefined;
+  const anthropicBody = req.body;
+  const requestedModel = anthropicBody.model;
+  const openaiBody = anthropicFrontend.anthropicToOpenAI(anthropicBody);
+
+  let attempt;
+  try {
+    attempt = await attemptChain(comboId, openaiBody);
+  } catch (err) {
+    logRequest({ combo_id: comboId, status: 'error', error: err.message });
+    return res.status(502).json({ type: 'error', error: { type: 'api_error', message: err.message } });
+  }
+
+  const { res: upstream, adapter, provider, account, model, started } = attempt;
+  const latency = () => Date.now() - started;
+
+  if (anthropicBody.stream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const ctx = { id: `chatcmpl-${nanoid(12)}`, created: Math.floor(Date.now() / 1000), model, usage: null };
+    const anthropicState = anthropicFrontend.createAnthropicStreamState(`msg_${nanoid(12)}`, requestedModel);
+    let buffer = '';
+
+    upstream.body.on('data', (chunk) => {
+      buffer += chunk.toString('utf8');
+      const events = buffer.split('\n\n');
+      buffer = events.pop();
+      for (const evt of events) {
+        const dataLine = evt.split('\n').find((l) => l.startsWith('data:'));
+        if (!dataLine) continue;
+        const openaiSse = adapter.translateStreamLine ? adapter.translateStreamLine(dataLine, ctx) : null;
+        if (!openaiSse) continue;
+        // Re-parse the OpenAI-shape chunk(s) we just produced and run them
+        // through the second translation stage into Anthropic-shape events.
+        for (const openaiEvt of openaiSse.split('\n\n')) {
+          const openaiDataLine = openaiEvt.split('\n').find((l) => l.startsWith('data:'));
+          if (!openaiDataLine) continue;
+          const raw = openaiDataLine.slice(5).trim();
+          if (!raw || raw === '[DONE]') continue;
+          let chunkJson;
+          try { chunkJson = JSON.parse(raw); } catch { continue; }
+          for (const anthropicEvt of anthropicFrontend.openaiChunkToAnthropicEvents(chunkJson, anthropicState)) {
+            res.write(anthropicEvt);
+          }
+        }
+      }
+    });
+    upstream.body.on('end', () => {
+      res.end();
+      logRequest({
+        combo_id: attempt.comboId, provider_id: provider.id, provider_name: provider.name,
+        account_label: account.label, model, status: 'success',
+        input_tokens: ctx.usage?.input || 0, output_tokens: ctx.usage?.output || 0,
+        cost_estimate: ctx.usage ? estimateCost(model, ctx.usage.input, ctx.usage.output) : 0,
+        latency_ms: latency()
+      });
+    });
+    upstream.body.on('error', (err) => {
+      res.end();
+      logRequest({ combo_id: attempt.comboId, provider_id: provider.id, provider_name: provider.name,
+        account_label: account.label, model, status: 'error', error: err.message, latency_ms: latency() });
+    });
+    return;
+  }
+
+  // Non-streaming
+  try {
+    const json = await upstream.json();
+    const openaiNormalized = adapter.normalizeResponse(json, model);
+    const anthropicShaped = anthropicFrontend.openaiResponseToAnthropic(openaiNormalized, requestedModel);
+    const usage = adapter.extractUsage(json);
+    logRequest({
+      combo_id: attempt.comboId, provider_id: provider.id, provider_name: provider.name,
+      account_label: account.label, model, status: 'success',
+      input_tokens: usage.input, output_tokens: usage.output,
+      cost_estimate: estimateCost(model, usage.input, usage.output), latency_ms: latency()
+    });
+    res.json(anthropicShaped);
+  } catch (err) {
+    logRequest({ combo_id: attempt.comboId, provider_id: provider.id, provider_name: provider.name,
+      account_label: account.label, model, status: 'error', error: err.message, latency_ms: latency() });
+    res.status(502).json({ type: 'error', error: { type: 'api_error', message: `Upstream response parse error: ${err.message}` } });
+  }
+});
+
+// ---------------------------------------------------------------------
 // Dashboard REST API — everything here requires a logged-in dashboard
 // session (see requireDashboardAuth above). Mounted under /api.
 // ---------------------------------------------------------------------
@@ -230,6 +332,16 @@ api.post('/accounts', (req, res) => {
   const id = nanoid();
   db.prepare('INSERT INTO accounts (id, provider_id, label, api_key) VALUES (?, ?, ?, ?)').run(id, provider_id, label, api_key);
   res.json({ id });
+});
+api.post('/accounts/:id/test', async (req, res) => {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
+  if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+  const provider = db.prepare('SELECT * FROM providers WHERE id = ?').get(account.provider_id);
+  if (!provider) return res.status(404).json({ ok: false, error: 'Provider not found' });
+  const { model } = req.body;
+  if (!model) return res.status(400).json({ ok: false, error: 'model is required to test with' });
+  const result = await testAccount({ provider, account, model });
+  res.json(result);
 });
 api.patch('/accounts/:id', (req, res) => {
   const { label, api_key, enabled } = req.body;

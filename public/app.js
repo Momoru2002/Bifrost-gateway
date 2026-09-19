@@ -28,6 +28,7 @@ async function api(path, opts = {}) {
 }
 
 const KIND_LABEL = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', openai_compatible: 'OpenAI-compatible' };
+const DEFAULT_TEST_MODEL = { openai: 'gpt-4o-mini', anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.0-flash', openai_compatible: '' };
 
 // ---------------------------------------------------------------------
 // Tabs
@@ -138,9 +139,11 @@ async function renderProviders() {
         const cooldownMs = a.cooldown_until ? new Date(a.cooldown_until) - new Date() : 0;
         const onCooldown = cooldownMs > 0;
         return `
-        <div class="account-row">
+        <div class="account-row" data-account-row="${a.id}">
           <span>${a.label} ${onCooldown ? `<span class="badge" style="color:var(--warn);border-color:var(--warn-dim)">cooldown ${Math.ceil(cooldownMs / 1000)}s</span>` : ''}</span>
           <span class="row">
+            <span class="test-result" data-test-result="${a.id}" style="font-size:11.5px;color:var(--text-dim)"></span>
+            <button class="btn small test-account" data-id="${a.id}" data-kind="${p.kind}">Test</button>
             <span class="status-dot ${!a.enabled ? 'error' : onCooldown ? 'warn' : 'ok'}"></span>
             <button class="btn small danger del-account" data-id="${a.id}">Hapus</button>
           </span>
@@ -167,6 +170,31 @@ async function renderProviders() {
   list.querySelectorAll('.del-account').forEach((b) => b.addEventListener('click', async () => {
     await api(`/accounts/${b.dataset.id}`, { method: 'DELETE' });
     renderProviders();
+  }));
+  list.querySelectorAll('.test-account').forEach((b) => b.addEventListener('click', async () => {
+    const kind = b.dataset.kind;
+    const defaultModel = DEFAULT_TEST_MODEL[kind] || '';
+    const model = prompt('Model buat test koneksi:', defaultModel);
+    if (!model) return;
+    const resultEl = document.querySelector(`[data-test-result="${b.dataset.id}"]`);
+    b.disabled = true;
+    resultEl.textContent = 'Testing…';
+    resultEl.style.color = 'var(--text-dim)';
+    try {
+      const result = await api(`/accounts/${b.dataset.id}/test`, { method: 'POST', body: { model } });
+      if (result.ok) {
+        resultEl.textContent = `OK — "${(result.sample || '').slice(0, 40)}"`;
+        resultEl.style.color = 'var(--signal)';
+      } else {
+        resultEl.textContent = `Gagal: ${(result.error || 'unknown error').slice(0, 60)}`;
+        resultEl.style.color = 'var(--danger)';
+      }
+    } catch (err) {
+      resultEl.textContent = 'Gagal: ' + err.message;
+      resultEl.style.color = 'var(--danger)';
+    } finally {
+      b.disabled = false;
+    }
   }));
   list.querySelectorAll('.del-provider').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('Hapus provider ini beserta semua account-nya?')) return;
