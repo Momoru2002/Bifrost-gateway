@@ -1,6 +1,6 @@
 # Bifrost
 
-Local AI routing gateway. Puts one OpenAI-compatible endpoint
+Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
 multi-account rotation and rate-limit-aware automatic fallback — when a
 key hits a `429`, Bifrost reads the provider's own retry-after signal and
@@ -8,19 +8,25 @@ cools that account down for exactly that long before trying it again.
 Includes a local dashboard to manage providers, accounts, routes, and
 usage/cost logs.
 
-Point any OpenAI-SDK-based tool (Claude Code, Cursor, Cline, your own
-scripts) at the gateway instead of a single provider directly.
+Point any OpenAI-SDK-based tool (Cursor, Cline, your own scripts) at
+`/v1/chat/completions`, or any Anthropic-SDK-based tool (**Claude Code**)
+at `/v1/messages` — including tool-calling — instead of a single provider
+directly. A Claude Code session can transparently be served by Gemini or
+OpenAI behind the scenes; see [Talking to Claude Code](#talking-to-claude-code).
 
 ## Status
 
-Feature-complete against the original roadmap. Working: OpenAI / Anthropic /
-Gemini adapters (chat, streaming, non-streaming) with real usage/token
-capture on both streaming and non-streaming calls, multi-account fallback,
-rate-limit-aware cooldowns (reads each provider's actual `retry-after` /
-reset headers instead of guessing), weighted and least-cost routing
-strategies, cost-estimate logging, encrypted cloud sync via a private
-GitHub Gist, dashboard. Not yet built: provider OAuth login flows (you
-paste an API key instead). See [Roadmap](#roadmap).
+Feature-complete against the original roadmap, plus native Anthropic
+protocol support. Working: OpenAI / Anthropic / Gemini adapters (chat,
+streaming, non-streaming, tool-calling) with real usage/token capture,
+multi-account fallback, rate-limit-aware cooldowns (reads each provider's
+actual `retry-after` / reset headers instead of guessing), weighted and
+least-cost routing strategies, cost-estimate logging, encrypted cloud
+sync via a private GitHub Gist, dashboard auth, a native `/v1/messages`
+endpoint for Anthropic-protocol tools (Claude Code) with tool-call
+translation across providers, and a per-account "Test connection" button.
+Not yet built: provider OAuth login flows (you paste an API key instead).
+See [Roadmap](#roadmap).
 
 ## Quick start
 
@@ -62,6 +68,33 @@ curl http://localhost:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"hi"}],"stream":false}'
 ```
+
+## Talking to Claude Code
+
+Claude Code speaks the Anthropic Messages API natively (`/v1/messages`,
+with its own tool-calling format) — not the OpenAI-compatible surface
+above. Bifrost translates that on the fly, so a route can point Claude
+Code at Gemini or OpenAI just as easily as at a real Claude account, tool
+calls included:
+
+```bash
+export ANTHROPIC_BASE_URL="http://localhost:8787"
+export ANTHROPIC_API_KEY="<your-gateway-key>"
+claude
+```
+
+(Claude Code accepts the gateway key as either `ANTHROPIC_API_KEY` or
+`ANTHROPIC_AUTH_TOKEN` — Bifrost accepts both `x-api-key` and
+`Authorization: Bearer`, whichever your tool sends.) The route Claude
+Code hits is still whatever combo is marked default (or picked via
+`x-bifrost-combo`) — the `model` Claude Code sends is not used to choose
+the provider, same as `/v1/chat/completions`.
+
+Known limitations of this translation layer (see `lib/anthropic_frontend.js`
+for detail): inline image content blocks aren't translated across
+providers yet; Gemini 3's thought-signature requirement for multi-turn
+tool use doesn't survive the round trip through Bifrost's internal
+OpenAI-shape representation, since that schema has no field for it.
 
 ## How routing works
 
@@ -135,13 +168,15 @@ already authenticating against the first one.
       counts for streamed requests, not just non-streaming ones)
 - [x] Cloud sync (encrypted, via a private GitHub Gist you own)
 - [x] Dashboard authentication (password + session, protects `/api/*`)
-- [ ] Native Anthropic `/v1/messages` endpoint (so Claude Code / other
-      Anthropic-protocol tools can talk to Bifrost directly, including
-      tool-call translation — currently Bifrost only speaks the
-      OpenAI-compatible surface)
-- [ ] "Test connection" button per account (validate a key when it's
-      added, instead of only finding out when a real request fails)
+- [x] Native Anthropic `/v1/messages` endpoint (Claude Code and other
+      Anthropic-protocol tools, including tool-call translation across
+      whichever provider a route points at)
+- [x] "Test connection" button per account
 - [ ] Provider OAuth login flows (today: paste an API key)
+- [ ] Provider catalog/presets for common OpenAI-compatible providers
+      (Groq, Together, DeepSeek, etc. — today you type the base URL by hand)
+- [ ] Circuit breaker (today: per-account cooldown only, not a
+      whole-provider trip after repeated failures)
 
 ## Stack
 
