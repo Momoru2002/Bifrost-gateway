@@ -123,6 +123,14 @@ A `5xx` gets a short 10s cooldown instead, since it's usually transient
 rather than a hard limit. The full response only fails if every account
 on every step is exhausted.
 
+Cooldowns handle a single bad moment; a **circuit breaker** handles an
+account that's just broken. Every failure (of any kind) also increments a
+per-account counter that resets on any success. After 5 consecutive
+failures, the account trips — instead of the normal cooldown above, it
+gets sidelined for 15 minutes, and shows up in the dashboard as "circuit
+breaker OPEN" rather than a regular cooldown, so a dead key reads as
+*broken*, not just *busy*.
+
 ## Cloud sync
 
 Bifrost has no server of its own to sync through, so it uses a **private
@@ -177,7 +185,15 @@ already authenticating against the first one.
       Anthropic-protocol tools, including tool-call translation across
       whichever provider a route points at)
 - [x] "Test connection" button per account
+- [x] Circuit breaker (accounts that fail repeatedly get a long cooldown,
+      not just the normal per-request one)
+- [x] Model dropdown (live model list per provider, Routes tab)
+- [x] Provider catalog/presets for common OpenAI-compatible providers
+- [x] Live-refreshing Logs tab, daily usage chart on Overview
+- [x] Rate-limited dashboard login, key preview, basic security headers
 - [ ] Provider OAuth login flows (today: paste an API key)
+- [ ] Multi-modal endpoints (images, embeddings, audio/TTS)
+- [ ] Token/prompt compression for cost savings on long tool-heavy sessions
 - [ ] Provider catalog/presets for common OpenAI-compatible providers
       (Groq, Together, DeepSeek, etc. — today you type the base URL by hand)
 - [ ] Circuit breaker (today: per-account cooldown only, not a
