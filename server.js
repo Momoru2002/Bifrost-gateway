@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
-const { attemptChain, testAccount, listModelsForProvider, estimateCost, logRequest, getCombo } = require('./lib/router');
+const { attemptChain, attemptEmbeddings, testAccount, listModelsForProvider, estimateCost, logRequest, getCombo } = require('./lib/router');
 const sync = require('./lib/sync');
 const auth = require('./lib/auth');
 const anthropicFrontend = require('./lib/anthropic_frontend');
@@ -217,6 +217,20 @@ app.post('/v1/chat/completions', requireGatewayKey, async (req, res) => {
     logRequest({ combo_id: attempt.comboId, provider_id: provider.id, provider_name: provider.name,
       account_label: account.label, model, status: 'error', error: err.message, latency_ms: latency() });
     res.status(502).json({ error: { message: `Upstream response parse error: ${err.message}` } });
+  }
+});
+
+app.post('/v1/embeddings', requireGatewayKey, async (req, res) => {
+  const comboId = req.query.combo || req.header('x-bifrost-combo') || undefined;
+  const { model, input } = req.body;
+  if (!input) return res.status(400).json({ error: { message: 'input is required' } });
+  try {
+    const result = await attemptEmbeddings(comboId, { model, input });
+    logRequest({ combo_id: comboId, status: 'success', model });
+    res.json(result);
+  } catch (err) {
+    logRequest({ combo_id: comboId, status: 'error', model, error: err.message });
+    res.status(502).json({ error: { message: err.message } });
   }
 });
 
