@@ -205,3 +205,12 @@ label:first-child { margin-top: 0; }
   font-size: 12px;
 }
 .step-order { color: var(--signal); font-weight: 600; }
+
+.auth-screen {
+  min-height: calc(100vh - 100px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-card { width: 100%; max-width: 380px; }
+.auth-card h2 { margin-bottom: 6px; }

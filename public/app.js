@@ -10,9 +10,16 @@ function toast(msg) {
 async function api(path, opts = {}) {
   const res = await fetch(`/api${path}`, {
     ...opts,
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    // Session expired or not logged in — bounce to the login screen instead
+    // of letting every tab's fetch fail silently with a generic error.
+    renderLogin();
+    throw new Error('Session expired, please log in again');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || 'Request failed');
@@ -353,6 +360,17 @@ async function renderSettings() {
       </details>
     </div>
     <div class="panel">
+      <h2>Password dashboard</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Password buat login ke dashboard ini (bukan API key provider).</p>
+      <form id="change-password-form">
+        <label>Password sekarang</label>
+        <input type="password" id="current-password" required />
+        <label>Password baru (min. 6 karakter)</label>
+        <input type="password" id="new-password" required minlength="6" />
+        <div style="margin-top:14px"><button class="btn small" type="submit">Ganti password</button></div>
+      </form>
+    </div>
+    <div class="panel">
       <h2>Export / Import config (manual, file lokal)</h2>
       <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Backup atau pindahin config lewat file, tanpa GitHub. File berisi API key dalam plain text — simpan aman, jangan commit ke repo publik.</p>
       <div class="row">
@@ -366,6 +384,16 @@ async function renderSettings() {
     const { key } = await api('/gateway-key/regenerate', { method: 'POST' });
     document.getElementById('gw-key').textContent = key;
     toast('Key baru dibuat');
+  });
+  document.getElementById('change-password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    try {
+      await api('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
+      toast('Password berhasil diganti');
+      e.target.reset();
+    } catch (err) { toast('Gagal: ' + err.message); }
   });
   document.getElementById('sync-push').addEventListener('click', async () => {
     const token = document.getElementById('sync-token').value.trim();
@@ -411,4 +439,89 @@ async function renderSettings() {
   });
 }
 
-render('overview');
+// ---------------------------------------------------------------------
+// Auth: first-run password setup, login, logout, session gating.
+// Every tab's data lives behind /api/*, which the server rejects with 401
+// until this passes — so nothing else renders until we're through here.
+// ---------------------------------------------------------------------
+function showChrome(show) {
+  document.getElementById('tabs').style.display = show ? '' : 'none';
+  document.getElementById('logout-btn').style.display = show ? '' : 'none';
+}
+
+function renderSetup() {
+  showChrome(false);
+  view.innerHTML = `
+    <div class="auth-screen">
+      <div class="panel auth-card">
+        <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
+        <h2>Bikin password dashboard</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Ini pertama kalinya Bifrost jalan di mesin ini. Bikin password buat lindungin dashboard — tanpa ini siapapun yang akses port 8787 bisa baca API key provider lu.</p>
+        <form id="setup-form">
+          <label>Password (min. 6 karakter)</label>
+          <input type="password" name="password" required minlength="6" autofocus />
+          <label>Ulangi password</label>
+          <input type="password" name="confirm" required minlength="6" />
+          <div id="setup-error" style="color:var(--danger);font-size:12.5px;margin-top:8px"></div>
+          <div style="margin-top:16px"><button class="btn primary" type="submit" style="width:100%">Bikin & masuk</button></div>
+        </form>
+      </div>
+    </div>
+  `;
+  document.getElementById('setup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const password = fd.get('password');
+    const errorEl = document.getElementById('setup-error');
+    if (password !== fd.get('confirm')) { errorEl.textContent = 'Password gak sama'; return; }
+    try {
+      const res = await fetch('/api/auth/setup', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); errorEl.textContent = j.error || 'Gagal setup'; return; }
+      boot();
+    } catch { errorEl.textContent = 'Gagal konek ke server'; }
+  });
+}
+
+function renderLogin() {
+  showChrome(false);
+  view.innerHTML = `
+    <div class="auth-screen">
+      <div class="panel auth-card">
+        <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
+        <h2>Masuk ke dashboard</h2>
+        <form id="login-form">
+          <label>Password</label>
+          <input type="password" name="password" required autofocus />
+          <div id="login-error" style="color:var(--danger);font-size:12.5px;margin-top:8px"></div>
+          <div style="margin-top:16px"><button class="btn primary" type="submit" style="width:100%">Masuk</button></div>
+        </form>
+      </div>
+    </div>
+  `;
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const errorEl = document.getElementById('login-error');
+    try {
+      const res = await fetch('/api/auth/login', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: fd.get('password') }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); errorEl.textContent = j.error || 'Login gagal'; return; }
+      boot();
+    } catch { errorEl.textContent = 'Gagal konek ke server'; }
+  });
+}
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  renderLogin();
+});
+
+async function boot() {
+  const statusRes = await fetch('/api/auth/status', { credentials: 'same-origin' });
+  const status = await statusRes.json();
+  if (status.needsSetup) return renderSetup();
+  if (!status.authenticated) return renderLogin();
+  showChrome(true);
+  render('overview');
+}
+
+boot();

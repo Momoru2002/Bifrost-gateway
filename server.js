@@ -4,6 +4,7 @@ const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
 const { attemptChain, estimateCost, logRequest, getCombo } = require('./lib/router');
 const sync = require('./lib/sync');
+const auth = require('./lib/auth');
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -17,11 +18,88 @@ const PORT = process.env.PORT || 8787;
 if (!getSetting('gateway_key')) {
   setSetting('gateway_key', `bf-${nanoid(32)}`);
 }
+if (!getSetting('session_secret')) {
+  setSetting('session_secret', nanoid(48));
+}
 function requireGatewayKey(req, res, next) {
-  const auth = req.headers.authorization || '';
-  const key = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  const authHeader = req.headers.authorization || '';
+  const key = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (key !== getSetting('gateway_key')) {
     return res.status(401).json({ error: { message: 'Invalid or missing gateway API key' } });
+  }
+  next();
+}
+
+// ---------------------------------------------------------------------
+// Dashboard auth (human, browser-based). Separate concern from the
+// gateway key above, which authenticates *tools* calling /v1/*. This
+// protects the /api/* management surface (providers, accounts, API keys,
+// logs, settings) — without it, anything that can reach this port can
+// read every provider API key stored here.
+//
+// Stateless signed-cookie sessions (see lib/auth.js) rather than a
+// session store: simple, and a server restart just means re-logging in.
+// ---------------------------------------------------------------------
+const SESSION_COOKIE = 'bifrost_session';
+
+app.use((req, res, next) => {
+  const cookies = auth.parseCookies(req.headers.cookie);
+  req.session = { authenticated: auth.verifySession(cookies[SESSION_COOKIE], getSetting('session_secret')) };
+  next();
+});
+
+function setSessionCookie(res) {
+  const token = auth.signSession(getSetting('session_secret'));
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(auth.SESSION_TTL_MS / 1000)}`);
+}
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+}
+
+const authApi = express.Router();
+authApi.get('/status', (req, res) => {
+  res.json({ needsSetup: !getSetting('dashboard_password_hash'), authenticated: req.session.authenticated });
+});
+authApi.post('/setup', (req, res) => {
+  if (getSetting('dashboard_password_hash')) return res.status(400).json({ error: 'Already set up — use /login instead' });
+  const { password } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  setSetting('dashboard_password_hash', auth.hashPassword(password));
+  setSessionCookie(res);
+  res.json({ ok: true });
+});
+authApi.post('/login', (req, res) => {
+  const hash = getSetting('dashboard_password_hash');
+  if (!hash) return res.status(400).json({ error: 'No password set up yet' });
+  const { password } = req.body;
+  if (!auth.verifyPassword(password || '', hash)) {
+    return res.status(401).json({ error: 'Wrong password' });
+  }
+  setSessionCookie(res);
+  res.json({ ok: true });
+});
+authApi.post('/logout', (req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+authApi.post('/change-password', (req, res) => {
+  if (!req.session.authenticated) return res.status(401).json({ error: 'Not authenticated' });
+  const hash = getSetting('dashboard_password_hash');
+  const { currentPassword, newPassword } = req.body;
+  if (!auth.verifyPassword(currentPassword || '', hash)) return res.status(401).json({ error: 'Current password is wrong' });
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  setSetting('dashboard_password_hash', auth.hashPassword(newPassword));
+  res.json({ ok: true });
+});
+app.use('/api/auth', authApi);
+
+// Everything else under /api/* requires a valid dashboard session.
+function requireDashboardAuth(req, res, next) {
+  if (!getSetting('dashboard_password_hash')) {
+    return res.status(403).json({ error: 'Dashboard not set up yet — visit the dashboard first to create a password' });
+  }
+  if (!req.session.authenticated) {
+    return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
 }
@@ -111,8 +189,8 @@ app.get('/v1/models', requireGatewayKey, (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// Dashboard REST API (no gateway-key required — local-only dashboard).
-// Mount everything under /api.
+// Dashboard REST API — everything here requires a logged-in dashboard
+// session (see requireDashboardAuth above). Mounted under /api.
 // ---------------------------------------------------------------------
 const api = express.Router();
 
@@ -303,7 +381,7 @@ api.post('/sync/link', (req, res) => {
   res.json({ ok: true });
 });
 
-app.use('/api', api);
+app.use('/api', requireDashboardAuth, api);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
