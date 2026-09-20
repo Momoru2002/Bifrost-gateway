@@ -457,6 +457,7 @@ async function renderLogs() {
 async function renderSettings() {
   const { key } = await api('/gateway-key');
   const syncStatus = await api('/sync/status');
+  const compression = await api('/settings/compression');
   view.innerHTML = `
     <h1>Settings</h1>
     <p class="subhead">Konfigurasi lokal gateway lu.</p>
@@ -465,6 +466,21 @@ async function renderSettings() {
       <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Pakai key ini sebagai Bearer token pas nunjuk tool (Claude Code, Cursor, dll) ke <code>http://localhost:8787/v1</code>. Ini bukan API key provider — ini kunci lokal biar cuma tool lu yang bisa lewat gateway.</p>
       <div class="key-box" id="gw-key">${key}</div>
       <div style="margin-top:10px"><button class="btn small" id="regen-key">Regenerate key</button></div>
+    </div>
+    <div class="panel">
+      <h2>Token compression</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">
+        Buat percakapan panjang yang banyak tool call (kayak Claude Code), hasil tool_result lama dipotong otomatis biar hemat token —
+        cuma tool_result yang <em>lama</em> (di luar N pesan terakhir) dan <em>panjang</em> yang kena. Bukan semantic caching, cuma truncation yang predictable.
+      </p>
+      <form id="compression-form">
+        <label class="row" style="margin-top:0"><input type="checkbox" id="comp-enabled" ${compression.enabled ? 'checked' : ''} style="width:auto" /> &nbsp;Aktifkan</label>
+        <label>Simpan penuh N pesan terakhir</label>
+        <input type="number" id="comp-keep" value="${compression.keepRecentMessages}" min="0" />
+        <label>Potong tool_result yang lebih panjang dari (karakter)</label>
+        <input type="number" id="comp-maxchars" value="${compression.maxToolResultChars}" min="200" />
+        <div style="margin-top:14px"><button class="btn small" type="submit">Simpan</button></div>
+      </form>
     </div>
     <div class="panel">
       <h2>Cloud sync</h2>
@@ -520,6 +536,17 @@ async function renderSettings() {
     const { key } = await api('/gateway-key/regenerate', { method: 'POST' });
     document.getElementById('gw-key').textContent = key;
     toast('Key baru dibuat');
+  });
+  document.getElementById('compression-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/settings/compression', { method: 'POST', body: {
+        enabled: document.getElementById('comp-enabled').checked,
+        keepRecentMessages: document.getElementById('comp-keep').value,
+        maxToolResultChars: document.getElementById('comp-maxchars').value
+      } });
+      toast('Pengaturan compression disimpan');
+    } catch (err) { toast('Gagal: ' + err.message); }
   });
   document.getElementById('change-password-form').addEventListener('submit', async (e) => {
     e.preventDefault();

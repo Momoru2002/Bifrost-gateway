@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
 const { attemptChain, attemptEmbeddings, testAccount, listModelsForProvider, estimateCost, logRequest, getCombo } = require('./lib/router');
+const { DEFAULT_CONFIG: COMPRESSION_DEFAULTS } = require('./lib/compression');
 const sync = require('./lib/sync');
 const auth = require('./lib/auth');
 const anthropicFrontend = require('./lib/anthropic_frontend');
@@ -473,6 +474,21 @@ api.get('/stats/daily', (req, res) => {
     ORDER BY day ASC
   `).all(`-${days} days`);
   res.json(rows);
+});
+
+api.get('/settings/compression', (req, res) => {
+  res.json({ ...COMPRESSION_DEFAULTS, ...getSetting('compression', {}) });
+});
+api.post('/settings/compression', (req, res) => {
+  const { enabled, keepRecentMessages, maxToolResultChars } = req.body;
+  const current = { ...COMPRESSION_DEFAULTS, ...getSetting('compression', {}) };
+  const updated = {
+    enabled: enabled === undefined ? current.enabled : !!enabled,
+    keepRecentMessages: keepRecentMessages === undefined ? current.keepRecentMessages : Math.max(0, parseInt(keepRecentMessages) || 0),
+    maxToolResultChars: maxToolResultChars === undefined ? current.maxToolResultChars : Math.max(200, parseInt(maxToolResultChars) || 200)
+  };
+  setSetting('compression', updated);
+  res.json(updated);
 });
 
 // Local "sync": export/import the whole config (providers, accounts, combos,

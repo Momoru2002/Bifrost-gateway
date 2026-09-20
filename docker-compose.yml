@@ -1,0 +1,11 @@
+services:
+  bifrost:
+    build: .
+    ports:
+      - "8787:8787"
+    volumes:
+      - bifrost_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  bifrost_data:
