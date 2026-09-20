@@ -80,6 +80,20 @@ curl http://localhost:8787/v1/embeddings \
   -d '{"input":"hello world"}'
 ```
 
+## Running with Docker
+
+```bash
+docker compose up
+```
+
+Builds and runs the gateway on port 8787 with a named volume for
+`data/bifrost.sqlite`, so your providers/accounts/routes survive a
+container rebuild. First run still walks you through the same dashboard
+password setup as running locally. Note: the image is built on
+`node:24-alpine`; if you're deploying somewhere with an older Node
+runtime already baked in, `npm install` needs 22.5+ regardless of how
+you run it, per the requirement above.
+
 ## Talking to Claude Code
 
 Claude Code speaks the Anthropic Messages API natively (`/v1/messages`,
@@ -142,6 +156,18 @@ gets sidelined for 15 minutes, and shows up in the dashboard as "circuit
 breaker OPEN" rather than a regular cooldown, so a dead key reads as
 *broken*, not just *busy*.
 
+## Token compression
+
+Long tool-heavy sessions (Claude Code especially) resend the *entire*
+conversation history on every turn, including old tool outputs the model
+has usually already moved past. By default, Bifrost truncates tool-result
+content older than the last 6 messages once it exceeds 4000 characters —
+middle-cut, both ends kept, with a marker noting how much was removed.
+This is a predictable size-based heuristic, not semantic caching or
+diffing — it trades a little old context fidelity for real token savings
+on long sessions. Toggle it off, or tune the thresholds, from the
+Settings tab.
+
 ## Cloud sync
 
 Bifrost has no server of its own to sync through, so it uses a **private
@@ -203,6 +229,11 @@ already authenticating against the first one.
 - [x] Live-refreshing Logs tab, daily usage chart on Overview
 - [x] Rate-limited dashboard login, key preview, basic security headers
 - [x] `/v1/embeddings` (OpenAI + Gemini — Anthropic has no embeddings API)
+- [x] Token/prompt compression for long tool-heavy sessions (truncates old,
+      oversized tool_result content — not semantic caching, a predictable
+      heuristic; on by default, tunable in Settings)
+- [x] Docker support (`docker compose up`)
+- [x] LICENSE (MIT)
 - [ ] Provider OAuth login flows — **not generically buildable**: this
       needs Bifrost registered as an OAuth app with each provider
       individually via that provider's own developer console, which only
@@ -210,7 +241,6 @@ already authenticating against the first one.
 - [ ] Image generation / audio-TTS endpoints (out of scope for a
       coding-tool-facing gateway; embeddings covered the realistic part
       of "multi-modal")
-- [ ] Token/prompt compression for cost savings on long tool-heavy sessions
 - [ ] Provider catalog/presets for common OpenAI-compatible providers
       (Groq, Together, DeepSeek, etc. — today you type the base URL by hand)
 - [ ] Circuit breaker (today: per-account cooldown only, not a
