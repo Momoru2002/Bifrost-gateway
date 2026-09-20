@@ -222,14 +222,20 @@ app.post('/v1/chat/completions', requireGatewayKey, async (req, res) => {
 
 app.post('/v1/embeddings', requireGatewayKey, async (req, res) => {
   const comboId = req.query.combo || req.header('x-bifrost-combo') || undefined;
-  const { model, input } = req.body;
+  const { input } = req.body;
   if (!input) return res.status(400).json({ error: { message: 'input is required' } });
   try {
-    const result = await attemptEmbeddings(comboId, { model, input });
-    logRequest({ combo_id: comboId, status: 'success', model });
+    const { result, provider, account, model, comboId: resolvedComboId } = await attemptEmbeddings(comboId, { input });
+    const usage = result.usage || {};
+    logRequest({
+      combo_id: resolvedComboId, provider_id: provider.id, provider_name: provider.name, account_label: account.label,
+      model, status: 'success',
+      input_tokens: usage.prompt_tokens || 0, output_tokens: 0,
+      cost_estimate: estimateCost(model, usage.prompt_tokens || 0, 0)
+    });
     res.json(result);
   } catch (err) {
-    logRequest({ combo_id: comboId, status: 'error', model, error: err.message });
+    logRequest({ combo_id: comboId, status: 'error', error: err.message });
     res.status(502).json({ error: { message: err.message } });
   }
 });
