@@ -20,6 +20,15 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 8787;
+const BOOT_TIME = Date.now();
+const DEFAULT_LOG_RETENTION_DAYS = 30;
+
+// No auth — standard for health checks (Docker healthcheck, uptime
+// monitors, load balancers all expect this to be reachable unauthenticated).
+// Deliberately reveals nothing about configuration, just liveness.
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime_seconds: Math.floor((Date.now() - BOOT_TIME) / 1000) });
+});
 
 // ---------------------------------------------------------------------
 // Gateway auth: a local key so random processes on your machine can't
@@ -447,6 +456,23 @@ api.get('/logs', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 500);
   res.json(db.prepare('SELECT * FROM request_logs ORDER BY ts DESC LIMIT ?').all(limit));
 });
+api.delete('/logs', (req, res) => {
+  // Manual "clear logs now" from the dashboard, independent of the
+  // automatic retention sweep below.
+  const days = req.query.olderThanDays ? parseInt(req.query.olderThanDays) : null;
+  const result = days
+    ? db.prepare("DELETE FROM request_logs WHERE ts < datetime('now', ?)").run(`-${days} days`)
+    : db.prepare('DELETE FROM request_logs').run();
+  res.json({ ok: true, deleted: result.changes });
+});
+api.get('/settings/log-retention', (req, res) => {
+  res.json({ retentionDays: getSetting('log_retention_days', DEFAULT_LOG_RETENTION_DAYS) });
+});
+api.post('/settings/log-retention', (req, res) => {
+  const days = Math.max(1, parseInt(req.body.retentionDays) || DEFAULT_LOG_RETENTION_DAYS);
+  setSetting('log_retention_days', days);
+  res.json({ retentionDays: days });
+});
 api.get('/stats', (req, res) => {
   const totals = db.prepare(`
     SELECT COUNT(*) as requests,
@@ -586,6 +612,17 @@ api.post('/sync/link', (req, res) => {
 
 app.use('/api', requireDashboardAuth, api);
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Automatic log retention — request_logs grows unbounded otherwise, which
+// matters once this is running unattended (Docker) rather than started
+// fresh each session locally. Runs once on boot, then every 6 hours.
+function pruneOldLogs() {
+  const days = getSetting('log_retention_days', DEFAULT_LOG_RETENTION_DAYS);
+  const result = db.prepare("DELETE FROM request_logs WHERE ts < datetime('now', ?)").run(`-${days} days`);
+  if (result.changes > 0) console.log(`pruned ${result.changes} log entries older than ${days} days`);
+}
+pruneOldLogs();
+setInterval(pruneOldLogs, 6 * 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`bifrost gateway listening on http://localhost:${PORT}`);

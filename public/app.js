@@ -425,7 +425,33 @@ function providerName(providers, id) {
 // Logs
 // ---------------------------------------------------------------------
 async function renderLogs() {
-  view.innerHTML = `<h1>Logs</h1><p class="subhead">100 request terakhir. <span id="live-dot" style="color:var(--signal)">● live</span></p><div id="log-body">Loading…</div>`;
+  const retention = await api('/settings/log-retention');
+  view.innerHTML = `
+    <h1>Logs</h1>
+    <p class="subhead">100 request terakhir. <span id="live-dot" style="color:var(--signal)">● live</span></p>
+    <div class="panel">
+      <div class="row-between">
+        <div class="row">
+          <span style="font-size:13px">Simpan log selama</span>
+          <input type="number" id="retention-days" value="${retention.retentionDays}" min="1" style="width:70px" />
+          <span style="font-size:13px;color:var(--text-dim)">hari</span>
+          <button class="btn small" id="save-retention">Simpan</button>
+        </div>
+        <button class="btn small danger" id="clear-logs">Hapus semua log sekarang</button>
+      </div>
+    </div>
+    <div id="log-body">Loading…</div>
+  `;
+  document.getElementById('save-retention').addEventListener('click', async () => {
+    await api('/settings/log-retention', { method: 'POST', body: { retentionDays: document.getElementById('retention-days').value } });
+    toast('Retention disimpan');
+  });
+  document.getElementById('clear-logs').addEventListener('click', async () => {
+    if (!confirm('Hapus SEMUA log request? Gak bisa dibatalin.')) return;
+    const r = await api('/logs', { method: 'DELETE' });
+    toast(`${r.deleted} log dihapus`);
+    draw();
+  });
   const draw = async () => {
     const logs = await api('/logs?limit=100');
     document.getElementById('log-body').innerHTML = logs.length ? `
