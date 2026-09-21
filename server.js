@@ -427,6 +427,47 @@ api.delete('/accounts/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// One-shot setup: creates a provider, an account under it, and either a
+// new default route or a new fallback step on the existing default route
+// — all in one call, atomically. This is what backs the dashboard's
+// single "Connect a provider" form, so a first-time user gets from zero
+// to a working route without needing to understand that providers,
+// accounts, and routes are three separate things first. Power users can
+// still manage each piece individually afterward in Providers/Routes.
+api.post('/quick-connect', async (req, res) => {
+  const { name, kind, base_url, api_key, model } = req.body;
+  if (!name || !kind || !api_key || !model) {
+    return res.status(400).json({ error: 'name, kind, api_key, and model are required' });
+  }
+  try {
+    const providerId = nanoid();
+    const accountId = nanoid();
+    let comboId;
+
+    const tx = db.transaction(() => {
+      db.prepare('INSERT INTO providers (id, name, kind, base_url) VALUES (?, ?, ?, ?)').run(providerId, name, kind, base_url || null);
+      db.prepare('INSERT INTO accounts (id, provider_id, label, api_key) VALUES (?, ?, ?, ?)').run(accountId, providerId, 'main', api_key);
+
+      const existingDefault = db.prepare('SELECT * FROM combos WHERE is_default = 1').get();
+      if (existingDefault) {
+        const steps = JSON.parse(existingDefault.steps_json);
+        steps.push({ provider_id: providerId, model });
+        db.prepare('UPDATE combos SET steps_json = ? WHERE id = ?').run(JSON.stringify(steps), existingDefault.id);
+        comboId = existingDefault.id;
+      } else {
+        comboId = nanoid();
+        db.prepare('INSERT INTO combos (id, name, steps_json, is_default, strategy) VALUES (?, ?, ?, 1, ?)')
+          .run(comboId, 'default', JSON.stringify([{ provider_id: providerId, model }]), 'ordered');
+      }
+    });
+    tx();
+
+    res.json({ providerId, accountId, comboId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 api.get('/combos', (req, res) => {
   const rows = db.prepare('SELECT * FROM combos ORDER BY created_at').all();
   res.json(rows.map((r) => ({ ...r, steps: JSON.parse(r.steps_json) })));
