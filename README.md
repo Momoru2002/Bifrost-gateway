@@ -186,6 +186,21 @@ one request. The per-machine `gateway_key` is deliberately left out of
 sync, so pulling config on a second machine won't invalidate whatever's
 already authenticating against the first one.
 
+## Running it long-term
+
+A few things that only matter once this stays up for a while (Docker, a
+VPS, whatever):
+
+- **`GET /health`** — unauthenticated liveness check (`{status, uptime_seconds}`),
+  for a Docker healthcheck or uptime monitor.
+- **Request timeouts** — every provider attempt gets 120s by default
+  before Bifrost gives up on it and falls through to the next
+  account/step, same as any other failure. Configurable via the
+  `request_timeout_ms` setting if a provider is just slow.
+- **Log retention** — `request_logs` is pruned automatically (default:
+  30 days, on boot and every 6 hours). Change it, or clear everything
+  immediately, from the Logs tab.
+
 ## Data & security notes
 
 - `data/bifrost.sqlite` holds your provider API keys in plaintext. It's
@@ -234,6 +249,8 @@ already authenticating against the first one.
       heuristic; on by default, tunable in Settings)
 - [x] Docker support (`docker compose up`)
 - [x] LICENSE (MIT)
+- [x] Request timeouts, automatic log retention, `/health` endpoint, CI
+      (GitHub Actions runs the test suite on every push)
 - [ ] Provider OAuth login flows — **not generically buildable**: this
       needs Bifrost registered as an OAuth app with each provider
       individually via that provider's own developer console, which only
@@ -249,4 +266,5 @@ already authenticating against the first one.
 ## Stack
 
 Express + Node's built-in `node:sqlite`, vanilla JS dashboard (no build
-step). Node 22.5+ (24+ recommended).
+step). Node 22.5+ (24+ recommended). `npm test` runs the regression
+suite (protocol translation + compression); CI runs it on every push.
