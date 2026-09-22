@@ -5,8 +5,8 @@ Local AI routing gateway. Puts two protocol-compatible endpoints
 multi-account rotation and rate-limit-aware automatic fallback — when a
 key hits a `429`, Bifrost reads the provider's own retry-after signal and
 cools that account down for exactly that long before trying it again.
-Includes a local dashboard to manage providers, accounts, routes, and
-usage/cost logs.
+Includes a local dashboard (sidebar-based, one-form provider setup) to
+manage providers, accounts, routes, and usage/cost logs.
 
 Point any OpenAI-SDK-based tool (Cursor, Cline, your own scripts) at
 `/v1/chat/completions`, or any Anthropic-SDK-based tool (**Claude Code**)
@@ -53,12 +53,15 @@ local secret, distinct from your provider API keys *and* from the
 dashboard password, that authenticates requests to the gateway itself
 (`/v1/*`) so nothing else on your machine can spend your credits silently.
 
-1. **Providers tab** — add a provider (OpenAI / Anthropic / Gemini / any
-   OpenAI-compatible endpoint), then add one or more accounts (API keys)
-   under it.
-2. **Routes tab** — build a fallback chain: an ordered list of
-   `provider + model` steps. Mark one route as default.
-3. Point your tool at `http://localhost:8787/v1` with the gateway key as
+1. **Dashboard tab** — the first thing you see is a "Connect a
+   provider" form: pick a type, name it, paste an API key, name a
+   model. One submit creates the provider, an account under it, and a
+   default route, all at once. Add a second provider the same way and
+   it becomes a fallback step on that same route — no separate
+   provider/account/route setup needed to get going. (The Providers and
+   Routes tabs are still there for managing multiple accounts per
+   provider, building weighted/least-cost fallback chains, etc.)
+2. Point your tool at `http://localhost:8787/v1` with the gateway key as
    the Bearer token (`Authorization: Bearer bf-xxxx`), same as you'd
    configure an OpenAI base URL.
 
