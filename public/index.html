@@ -7,24 +7,43 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div class="shell">
-  <header class="topbar">
+<div class="shell" id="shell" style="display:none">
+  <aside class="sidebar">
     <div class="brand">
       <span class="brand-mark">bf⁄</span>
       <span class="brand-name">Bifrost</span>
     </div>
-    <nav class="tabs" id="tabs">
-      <button data-tab="overview" class="active">Overview</button>
-      <button data-tab="providers">Providers</button>
-      <button data-tab="combos">Routes</button>
-      <button data-tab="logs">Logs</button>
-      <button data-tab="settings">Settings</button>
+    <nav class="nav" id="nav">
+      <button data-tab="overview" class="active">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="1.5" width="6" height="6" rx="1"/><rect x="8.5" y="1.5" width="6" height="4" rx="1"/><rect x="8.5" y="7.5" width="6" height="7" rx="1"/><rect x="1.5" y="9.5" width="6" height="5" rx="1"/></svg>
+        Dashboard
+      </button>
+      <button data-tab="providers">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2.5" width="13" height="4" rx="1"/><rect x="1.5" y="9.5" width="13" height="4" rx="1"/><circle cx="4" cy="4.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="4" cy="11.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+        Providers
+      </button>
+      <button data-tab="combos">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="3" cy="3" r="1.6"/><circle cx="3" cy="13" r="1.6"/><circle cx="13" cy="8" r="1.6"/><path d="M3 4.6V11.4M4.4 3.4L11.5 7"/></svg>
+        Routes
+      </button>
+      <button data-tab="logs">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3h12M2 8h12M2 13h8"/></svg>
+        Logs
+      </button>
+      <button data-tab="settings">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.4 3.6l-1.4 1.4M5 9.6l-1.4 1.4M12.4 12.4l-1.4-1.4M5 6.4L3.6 5"/></svg>
+        Settings
+      </button>
     </nav>
-    <button id="logout-btn" class="btn small" style="display:none">Keluar</button>
-  </header>
-
-  <main id="view"></main>
+    <div class="sidebar-foot">
+      <div class="live-pill"><span class="dot"></span> gateway aktif</div>
+      <button class="btn small" id="logout-btn" style="width:100%">Keluar</button>
+    </div>
+  </aside>
+  <main class="main" id="view"></main>
 </div>
+
+<div id="auth-root"></div>
 
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>

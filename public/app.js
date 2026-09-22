@@ -54,10 +54,10 @@ const PROVIDER_CATALOG = [
 // ---------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------
-document.getElementById('tabs').addEventListener('click', (e) => {
+document.getElementById('nav').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
   if (!btn) return;
-  document.querySelectorAll('.tabs button').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach((b) => b.classList.remove('active'));
   btn.classList.add('active');
   render(btn.dataset.tab);
 });
@@ -84,7 +84,7 @@ function dailyChartSvg(daily) {
     const x = PAD + i * barW;
     const y = H - PAD - h;
     const hasErrors = d.errors > 0;
-    return `<rect x="${x + 2}" y="${y}" width="${Math.max(barW - 4, 2)}" height="${h}" fill="${hasErrors ? 'var(--warn)' : 'var(--signal)'}" rx="2">
+    return `<rect x="${x + 2}" y="${y}" width="${Math.max(barW - 4, 2)}" height="${h}" fill="${hasErrors ? 'var(--warn)' : 'var(--ok)'}" rx="2">
       <title>${d.day}: ${d.requests} request${d.errors ? `, ${d.errors} error` : ''}</title>
     </rect>`;
   }).join('');
@@ -97,12 +97,21 @@ function dailyChartSvg(daily) {
 }
 
 async function renderOverview() {
-  view.innerHTML = `<h1>Overview</h1><p class="subhead">Status jaringan gateway lu, hari ini.</p><div id="ov-body">Loading…</div>`;
+  view.innerHTML = `<h1>Dashboard</h1><p class="subhead">Status jaringan gateway lu, hari ini.</p><div id="ov-body">Loading…</div>`;
   const [stats, providers, daily] = await Promise.all([api('/stats'), api('/providers'), api('/stats/daily?days=14')]);
   const t = stats.totals || {};
   const activeAccounts = providers.reduce((n, p) => n + p.accounts.filter((a) => a.enabled).length, 0);
+  const hasProviders = providers.length > 0;
 
   document.getElementById('ov-body').innerHTML = `
+    ${hasProviders ? `
+      <div class="row-between" style="margin-bottom:18px">
+        <div></div>
+        <button class="btn small" id="qc-toggle">+ Connect provider lain</button>
+      </div>
+      <div class="quickstart" id="qc-panel" style="display:none">${quickConnectFormHtml(providers)}</div>
+    ` : `<div class="quickstart">${quickConnectFormHtml(providers)}</div>`}
+    ${hasProviders ? `
     <div class="grid-3">
       <div class="stat"><div class="label">Total requests</div><div class="value">${t.requests || 0}</div></div>
       <div class="stat"><div class="label">Estimated cost</div><div class="value">$${(t.cost || 0).toFixed(4)}</div></div>
@@ -124,10 +133,91 @@ async function renderOverview() {
           ? `<table><thead><tr><th>Provider</th><th>Requests</th><th>Cost</th></tr></thead><tbody>
               ${stats.byProvider.map((p) => `<tr><td>${p.provider_name}</td><td>${p.requests}</td><td>$${(p.cost || 0).toFixed(4)}</td></tr>`).join('')}
             </tbody></table>`
-          : `<div class="empty">Belum ada request. Hit endpoint /v1/chat/completions buat mulai lihat data.</div>`
+          : `<div class="empty">Belum ada request. Coba tes koneksi di tab Providers, atau langsung hit endpoint-nya.</div>`
       }
-    </div>
+    </div>` : ''}
   `;
+
+  const toggleBtn = document.getElementById('qc-toggle');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const panel = document.getElementById('qc-panel');
+      const showing = panel.style.display !== 'none';
+      panel.style.display = showing ? 'none' : 'block';
+      toggleBtn.textContent = showing ? '+ Connect provider lain' : 'Tutup';
+    });
+  }
+  wireQuickConnectForm();
+}
+
+function quickConnectFormHtml(providers) {
+  return `
+    <h2>${providers.length ? 'Connect provider lain' : 'Connect provider pertama lu'}</h2>
+    <p style="color:var(--text-dim);font-size:13.5px;margin-top:-8px">Satu form — provider, account, dan route langsung jadi sekaligus, siap dipake.</p>
+    <form id="quickconnect-form">
+      <div class="grid-2">
+        <div>
+          <label>Tipe</label>
+          <select name="kind" id="qc-kind">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai_compatible">OpenAI-compatible lain</option>
+          </select>
+        </div>
+        <div>
+          <label>Nama (bebas)</label>
+          <input name="name" placeholder="mis. Gemini utama" required />
+        </div>
+      </div>
+      <div id="qc-catalog-field" style="display:none">
+        <label>Preset</label>
+        <select id="qc-catalog-select">
+          <option value="">— Custom (masukin base URL manual) —</option>
+          ${PROVIDER_CATALOG.map((c) => `<option value="${c.base_url}" data-name="${c.name}">${c.name}</option>`).join('')}
+        </select>
+        <label>Base URL</label>
+        <input name="base_url" placeholder="https://api.groq.com/openai" />
+      </div>
+      <label>API key</label>
+      <input type="password" name="api_key" required placeholder="API key dari provider ini" />
+      <label>Model</label>
+      <input name="model" required placeholder="mis. gemini-2.0-flash" />
+      <div id="qc-error" style="color:var(--danger);font-size:12.5px;margin-top:8px"></div>
+      <div style="margin-top:16px"><button class="btn primary" type="submit">Connect</button></div>
+    </form>
+  `;
+}
+
+function wireQuickConnectForm() {
+  const kindSelect = document.getElementById('qc-kind');
+  const catalogField = document.getElementById('qc-catalog-field');
+  if (!kindSelect) return;
+  kindSelect.addEventListener('change', () => {
+    catalogField.style.display = kindSelect.value === 'openai_compatible' ? 'block' : 'none';
+  });
+  const catalogSelect = document.getElementById('qc-catalog-select');
+  const form = document.getElementById('quickconnect-form');
+  catalogSelect.addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (opt.value) {
+      form.base_url.value = opt.value;
+      if (!form.name.value) form.name.value = opt.dataset.name;
+    }
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const errorEl = document.getElementById('qc-error');
+    errorEl.textContent = '';
+    try {
+      await api('/quick-connect', { method: 'POST', body: {
+        name: fd.get('name'), kind: fd.get('kind'), base_url: fd.get('base_url'), api_key: fd.get('api_key'), model: fd.get('model')
+      } });
+      toast('Provider terhubung');
+      renderOverview();
+    } catch (err) { errorEl.textContent = err.message; }
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -253,7 +343,7 @@ async function renderProviders() {
       const result = await api(`/accounts/${b.dataset.id}/test`, { method: 'POST', body: { model } });
       if (result.ok) {
         resultEl.textContent = `OK — "${(result.sample || '').slice(0, 40)}"`;
-        resultEl.style.color = 'var(--signal)';
+        resultEl.style.color = 'var(--ok)';
       } else {
         resultEl.textContent = `Gagal: ${(result.error || 'unknown error').slice(0, 60)}`;
         resultEl.style.color = 'var(--danger)';
@@ -401,7 +491,7 @@ async function renderCombos() {
         <div class="row">
           <strong>${c.name}</strong>
           <span class="badge">${STRATEGY_LABEL[c.strategy] || 'Ordered fallback'}</span>
-          ${c.is_default ? '<span class="badge" style="color:var(--signal);border-color:var(--signal-dim)">default</span>' : ''}
+          ${c.is_default ? '<span class="badge" style="color:var(--ok);border-color:var(--ok-dim)">default</span>' : ''}
         </div>
         <button class="btn small danger del-combo" data-id="${c.id}">Hapus</button>
       </div>
@@ -428,7 +518,7 @@ async function renderLogs() {
   const retention = await api('/settings/log-retention');
   view.innerHTML = `
     <h1>Logs</h1>
-    <p class="subhead">100 request terakhir. <span id="live-dot" style="color:var(--signal)">● live</span></p>
+    <p class="subhead">100 request terakhir. <span id="live-dot" style="color:var(--ok)">● live</span></p>
     <div class="panel">
       <div class="row-between">
         <div class="row">
@@ -517,7 +607,7 @@ async function renderSettings() {
       </p>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px">
         Status: ${syncStatus.gistId
-          ? `terhubung ke <a href="https://gist.github.com/${syncStatus.gistId}" target="_blank" style="color:var(--signal)">gist ${syncStatus.gistId.slice(0, 8)}…</a>${syncStatus.lastSyncedAt ? ` · terakhir sync ${new Date(syncStatus.lastSyncedAt).toLocaleString()}` : ''}`
+          ? `terhubung ke <a href="https://gist.github.com/${syncStatus.gistId}" target="_blank" style="color:var(--ok)">gist ${syncStatus.gistId.slice(0, 8)}…</a>${syncStatus.lastSyncedAt ? ` · terakhir sync ${new Date(syncStatus.lastSyncedAt).toLocaleString()}` : ''}`
           : 'belum pernah sync dari mesin ini'}
       </div>
       <label>GitHub Personal Access Token</label>
@@ -634,13 +724,13 @@ async function renderSettings() {
 // until this passes — so nothing else renders until we're through here.
 // ---------------------------------------------------------------------
 function showChrome(show) {
-  document.getElementById('tabs').style.display = show ? '' : 'none';
-  document.getElementById('logout-btn').style.display = show ? '' : 'none';
+  document.getElementById('shell').style.display = show ? '' : 'none';
+  document.getElementById('auth-root').style.display = show ? 'none' : '';
 }
 
 function renderSetup() {
   showChrome(false);
-  view.innerHTML = `
+  document.getElementById('auth-root').innerHTML = `
     <div class="auth-screen">
       <div class="panel auth-card">
         <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
@@ -673,7 +763,7 @@ function renderSetup() {
 
 function renderLogin() {
   showChrome(false);
-  view.innerHTML = `
+  document.getElementById('auth-root').innerHTML = `
     <div class="auth-screen">
       <div class="panel auth-card">
         <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
@@ -709,6 +799,7 @@ async function boot() {
   const status = await statusRes.json();
   if (status.needsSetup) return renderSetup();
   if (!status.authenticated) return renderLogin();
+  document.getElementById('auth-root').innerHTML = '';
   showChrome(true);
   render('overview');
 }
