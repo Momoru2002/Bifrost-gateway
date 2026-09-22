@@ -1,6 +1,6 @@
 {
   "name": "bifrost",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Local AI routing gateway - OpenAI-compatible endpoint with multi-provider, multi-account fallback",
   "main": "server.js",
   "type": "commonjs",
@@ -11,7 +11,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "reset-password": "node scripts/reset-password.js",
-    "test": "node test/translation.test.js && node test/compression.test.js"
+    "test": "node test/translation.test.js && node test/compression.test.js && node test/quick-connect.test.js"
   },
   "dependencies": {
     "express": "^4.19.2",

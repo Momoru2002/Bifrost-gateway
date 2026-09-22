@@ -1,6 +1,6 @@
 # Bifrost
 
-**v4.0.0**
+**v4.0.1**
 
 Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
@@ -205,6 +205,11 @@ VPS, whatever):
 - **Log retention** — `request_logs` is pruned automatically (default:
   30 days, on boot and every 6 hours). Change it, or clear everything
   immediately, from the Logs tab.
+- **Failed-request diagnostics** — the Logs tab now shows the actual
+  error text under a failed row's status (e.g. "No combo found", or the
+  upstream provider's own error), instead of just a bare "error" with no
+  way to tell what went wrong. The full message is available on hover;
+  it was always recorded in `request_logs.error`, just never rendered.
 
 ## Data & security notes
 
@@ -216,6 +221,11 @@ VPS, whatever):
   key you've added. Sessions are signed cookies with a 7-day expiry.
   Login, setup, and change-password are rate-limited (10 attempts / 15
   min per IP) against brute-forcing that password.
+- The one-form "Connect a provider" flow (`/api/quick-connect`) now sends
+  a real test request to the provider with the key/model you entered
+  *before* saving anything — a typo'd key or model name is rejected with
+  the provider's own error message instead of silently saving a
+  provider/account/route that will only fail later.
 - Provider API keys are never sent back to the dashboard once saved —
   the accounts listing only includes a `key_preview` (last 4 characters)
   so accounts stay distinguishable in the UI.
@@ -268,7 +278,9 @@ VPS, whatever):
 
 Express + Node's built-in `node:sqlite`, vanilla JS dashboard (no build
 step). Node 22.5+ (24+ recommended). `npm test` runs the regression
-suite (protocol translation + compression); CI runs it on every push.
+suite (protocol translation + compression + a quick-connect/logs
+integration test against a real server instance and a mock upstream
+provider); CI runs it on every push.
 
 ## Changelog
 
@@ -277,6 +289,15 @@ big multi-feature batch, minor = a new capability, patch = a fix or
 small tweak. Grouped from the commit history; pure documentation-only
 commits aren't counted as their own version.
 
+- **4.0.1** — Fix: `/api/quick-connect` saved a provider/account/route
+  without ever testing the key, so an invalid key or model still showed
+  "Provider terhubung"; it now runs the same check as the per-account
+  "Test connection" button before saving, and rejects with the real
+  provider error if it fails. Fix: the Logs tab discarded the stored
+  `request_logs.error` message, so a failed row showed no indication of
+  why (found via real-browser dashboard screenshots — the first time the
+  4.0.0 redesign was actually looked at rendered, not just tested via
+  API/DOM checks)
 - **4.0.0** — Full dashboard redesign: sidebar layout, new visual
   identity, one-form provider setup (`/api/quick-connect`)
 - **3.3.1** — `/api/quick-connect` endpoint

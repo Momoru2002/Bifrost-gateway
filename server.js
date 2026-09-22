@@ -439,6 +439,17 @@ api.post('/quick-connect', async (req, res) => {
   if (!name || !kind || !api_key || !model) {
     return res.status(400).json({ error: 'name, kind, api_key, and model are required' });
   }
+
+  // Verify the key + model actually work against the real provider before
+  // writing anything to the DB. Without this, a typo'd key or model name
+  // still gets a "Provider terhubung" success toast, and the user only
+  // finds out it's broken later when a real chat request fails — with no
+  // indication of why (see the /logs error-surfacing fix alongside this).
+  const testResult = await testAccount({ provider: { kind, base_url }, account: { api_key }, model });
+  if (!testResult.ok) {
+    return res.status(400).json({ error: `Gagal verifikasi provider: ${testResult.error}` });
+  }
+
   try {
     const providerId = nanoid();
     const accountId = nanoid();

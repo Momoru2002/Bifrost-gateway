@@ -7,6 +7,16 @@ function toast(msg) {
   setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
 
+// Error messages rendered in the Logs table can contain raw upstream
+// provider response text (see lib/router.js's "All providers/accounts
+// exhausted" and per-account error strings), which is untrusted content
+// being inserted via innerHTML — escape it before display.
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(`/api${path}`, {
     ...opts,
@@ -553,7 +563,10 @@ async function renderLogs() {
               <td>${new Date(l.ts + 'Z').toLocaleTimeString()}</td>
               <td>${l.provider_name || '-'}${l.account_label ? ' / ' + l.account_label : ''}</td>
               <td>${l.model || '-'}</td>
-              <td><span class="status-dot ${l.status === 'success' ? 'ok' : 'error'}"></span>${l.status}</td>
+              <td>
+                <span class="status-dot ${l.status === 'success' ? 'ok' : 'error'}"></span>${l.status}
+                ${l.status !== 'success' && l.error ? `<div class="log-error" title="${escapeHtml(l.error)}">${escapeHtml(l.error.slice(0, 80))}${l.error.length > 80 ? '…' : ''}</div>` : ''}
+              </td>
               <td>${l.input_tokens || 0}/${l.output_tokens || 0}</td>
               <td>$${(l.cost_estimate || 0).toFixed(5)}</td>
               <td>${l.latency_ms || 0}ms</td>
