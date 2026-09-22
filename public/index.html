@@ -10,7 +10,16 @@
 <div class="shell" id="shell" style="display:none">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">bf⁄</span>
+      <svg class="brand-glyph" viewBox="0 0 30 22" width="28" height="20" aria-hidden="true">
+        <defs>
+          <linearGradient id="bridge-grad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="var(--ember)" />
+            <stop offset="1" stop-color="var(--aurora)" />
+          </linearGradient>
+        </defs>
+        <path d="M2 20 C2 7.5 28 7.5 28 20" stroke="url(#bridge-grad)" stroke-width="2.6" fill="none" stroke-linecap="round" />
+        <path d="M2 20 C2 11 28 11 28 20" stroke="url(#bridge-grad)" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".45" />
+      </svg>
       <span class="brand-name">Bifrost</span>
     </div>
     <nav class="nav" id="nav">

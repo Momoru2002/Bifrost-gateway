@@ -1,6 +1,27 @@
 const view = document.getElementById('view');
 const toastEl = document.getElementById('toast');
 
+// Reused wherever the brand mark appears outside the sidebar (which has
+// its own copy baked into index.html) — the login/setup screens render
+// dynamically so they need the same glyph as a JS string.
+const BRAND_GLYPH_SVG = `<svg class="brand-glyph" viewBox="0 0 30 22" width="28" height="20" aria-hidden="true">
+  <defs><linearGradient id="bridge-grad-2" x1="0" y1="1" x2="1" y2="0">
+    <stop offset="0" stop-color="var(--ember)" /><stop offset="1" stop-color="var(--aurora)" />
+  </linearGradient></defs>
+  <path d="M2 20 C2 7.5 28 7.5 28 20" stroke="url(#bridge-grad-2)" stroke-width="2.6" fill="none" stroke-linecap="round" />
+  <path d="M2 20 C2 11 28 11 28 20" stroke="url(#bridge-grad-2)" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".45" />
+</svg>`;
+
+// Empty states are a direction, not a dead end: a small glyph plus a copy
+// line that says what to do next, in the interface's voice — used at every
+// call site below instead of a bare "belum ada apa-apa" box.
+function emptyState(text) {
+  return `<div class="empty">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="16" cy="16" r="10.5" stroke-dasharray="2.8 4.2" /><path d="M16 11v10M11 16h10" /></svg>
+    <p>${text}</p>
+  </div>`;
+}
+
 function toast(msg) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
@@ -85,7 +106,7 @@ let logsRefreshInterval = null;
 // Overview
 // ---------------------------------------------------------------------
 function dailyChartSvg(daily) {
-  if (!daily.length) return `<div class="empty">Belum ada data. Chart muncul setelah ada request.</div>`;
+  if (!daily.length) return emptyState('Belum ada data. Chart muncul setelah ada request.');
   const W = 720, H = 160, PAD = 24;
   const max = Math.max(1, ...daily.map((d) => d.requests));
   const barW = (W - PAD * 2) / daily.length;
@@ -143,7 +164,7 @@ async function renderOverview() {
           ? `<table><thead><tr><th>Provider</th><th>Requests</th><th>Cost</th></tr></thead><tbody>
               ${stats.byProvider.map((p) => `<tr><td>${p.provider_name}</td><td>${p.requests}</td><td>$${(p.cost || 0).toFixed(4)}</td></tr>`).join('')}
             </tbody></table>`
-          : `<div class="empty">Belum ada request. Coba tes koneksi di tab Providers, atau langsung hit endpoint-nya.</div>`
+          : emptyState('Belum ada request. Coba tes koneksi di tab Providers, atau langsung hit endpoint-nya.')
       }
     </div>` : ''}
   `;
@@ -286,7 +307,7 @@ async function renderProviders() {
   const providers = await api('/providers');
   const list = document.getElementById('provider-list');
   if (!providers.length) {
-    list.innerHTML = `<div class="empty">Belum ada provider. Tambah satu di atas dulu.</div>`;
+    list.innerHTML = emptyState('Belum ada provider. Tambah satu di atas dulu.');
     return;
   }
   list.innerHTML = providers.map((p) => `
@@ -318,7 +339,7 @@ async function renderProviders() {
           </span>
         </div>
       `;
-      }).join('') || '<div class="empty" style="padding:10px 0">Belum ada account/API key.</div>'}
+      }).join('') || '<div class="empty compact">Belum ada account/API key.</div>'}
       <form class="add-account-form" data-provider="${p.id}" style="margin-top:12px">
         <div class="row">
           <input name="label" placeholder="label (mis. akun-1)" required style="flex:1" />
@@ -420,7 +441,7 @@ async function renderCombos() {
   });
 
   if (!providers.length) {
-    document.querySelector('#combo-form').innerHTML = `<div class="empty">Tambah provider dulu di tab Providers sebelum bikin route.</div>`;
+    document.querySelector('#combo-form').innerHTML = emptyState('Tambah provider dulu di tab Providers sebelum bikin route.');
   }
 
   // Model dropdown: fetch the real model list for whichever provider is
@@ -510,7 +531,7 @@ async function renderCombos() {
       </div>
       ${c.strategy && c.strategy !== 'ordered' ? `<div style="color:var(--text-dim);font-size:12px;margin-top:8px">Urutan aktual per-request bisa beda dari daftar di atas — ${c.strategy === 'cost' ? 'termurah dicoba duluan' : 'dipilih random sesuai bobot'}.</div>` : ''}
     </div>
-  `).join('') : `<div class="empty">Belum ada route.</div>`;
+  `).join('') : emptyState('Belum ada route.');
 
   list.querySelectorAll('.del-combo').forEach((b) => b.addEventListener('click', async () => {
     await api(`/combos/${b.dataset.id}`, { method: 'DELETE' });
@@ -574,7 +595,7 @@ async function renderLogs() {
           `).join('')}
         </tbody>
       </table>
-    ` : `<div class="empty">Belum ada log request.</div>`;
+    ` : emptyState('Belum ada log request.');
   };
   await draw();
   logsRefreshInterval = setInterval(draw, 4000);
@@ -746,7 +767,7 @@ function renderSetup() {
   document.getElementById('auth-root').innerHTML = `
     <div class="auth-screen">
       <div class="panel auth-card">
-        <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
+        <div class="brand" style="margin-bottom:18px">${BRAND_GLYPH_SVG}<span class="brand-name">Bifrost</span></div>
         <h2>Bikin password dashboard</h2>
         <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Ini pertama kalinya Bifrost jalan di mesin ini. Bikin password buat lindungin dashboard — tanpa ini siapapun yang akses port 8787 bisa baca API key provider lu.</p>
         <form id="setup-form">
@@ -779,7 +800,7 @@ function renderLogin() {
   document.getElementById('auth-root').innerHTML = `
     <div class="auth-screen">
       <div class="panel auth-card">
-        <div class="brand" style="margin-bottom:18px"><span class="brand-mark">bf⁄</span><span class="brand-name">Bifrost</span></div>
+        <div class="brand" style="margin-bottom:18px">${BRAND_GLYPH_SVG}<span class="brand-name">Bifrost</span></div>
         <h2>Masuk ke dashboard</h2>
         <form id="login-form">
           <label>Password</label>

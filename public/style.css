@@ -14,6 +14,8 @@
   --ember: #f0a94e;
   --ember-dim: #4a341a;
   --ember-ink: #241505;
+  --aurora: #8b93e8;
+  --aurora-dim: #2a2c4e;
   --ok: #6fb98f;
   --ok-dim: #1f3a2c;
   --warn: #e8974a;
@@ -56,13 +58,8 @@ body {
   top: 0;
   height: 100vh;
 }
-.brand { display: flex; align-items: baseline; gap: 8px; padding: 0 10px 22px; }
-.brand-mark {
-  font-family: var(--serif);
-  color: var(--ember);
-  font-size: 22px;
-  font-weight: 600;
-}
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 22px; }
+.brand-glyph { flex-shrink: 0; }
 .brand-name { font-family: var(--serif); font-weight: 600; font-size: 17px; letter-spacing: -0.2px; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -128,7 +125,7 @@ h2 { font-size: 15px; margin: 0 0 14px; font-weight: 600; }
   background: var(--surface-raised);
 }
 .stat .label { color: var(--text-dim); font-size: 12px; margin-bottom: 8px; }
-.stat .value { font-family: var(--serif); font-size: 26px; font-weight: 600; }
+.stat .value { font-family: var(--serif); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
 
 /* ---------------------------------------------------------------- */
 /* Tables                                                             */
@@ -235,13 +232,20 @@ label:first-child { margin-top: 0; }
 }
 
 .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   color: var(--text-dim);
   font-size: 13.5px;
-  padding: 30px 20px;
+  padding: 36px 20px;
   text-align: center;
-  border: 1px dashed var(--line);
+  background: var(--line-soft);
   border-radius: var(--radius);
 }
+.empty svg { width: 30px; height: 30px; opacity: .6; }
+.empty p { margin: 0; max-width: 320px; }
+.empty.compact { flex-direction: row; padding: 10px 0; background: none; font-size: 12.5px; justify-content: flex-start; }
 
 .toast {
   position: fixed;
@@ -282,7 +286,8 @@ label:first-child { margin-top: 0; }
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse 900px 500px at 50% 0%, var(--ember-dim), transparent 60%),
+    radial-gradient(ellipse 800px 420px at 20% 0%, var(--ember-dim), transparent 55%),
+    radial-gradient(ellipse 800px 420px at 85% 0%, var(--aurora-dim), transparent 55%),
     var(--ink);
 }
 .auth-card { width: 100%; max-width: 380px; }
@@ -307,4 +312,13 @@ label:first-child { margin-top: 0; }
   .nav { flex-direction: row; overflow-x: auto; }
   .sidebar-foot { display: none; }
   .main { padding: 22px 18px 50px; }
+}
+
+/* ---------------------------------------------------------------- */
+/* Accessibility: visible keyboard focus, respect reduced motion     */
+/* ---------------------------------------------------------------- */
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
 }

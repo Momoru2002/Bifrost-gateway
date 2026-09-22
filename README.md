@@ -1,6 +1,6 @@
 # Bifrost
 
-**v4.0.1**
+**v4.0.2**
 
 Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
@@ -289,6 +289,16 @@ big multi-feature batch, minor = a new capability, patch = a fix or
 small tweak. Grouped from the commit history; pure documentation-only
 commits aren't counted as their own version.
 
+- **4.0.2** — Visual polish pass on the 4.0.0 redesign, based on actually
+  looking at it rendered in a browser for the first time (screenshots):
+  a second accent color (`--aurora`, a cool violet-blue) alongside the
+  existing warm ember, used for a small gradient bridge-arc glyph that
+  replaces the plain "bf⁄" text as the sidebar/login brand mark; every
+  empty state (8 places across Dashboard, Providers, Routes, Logs) now
+  shows a small icon plus a direction-giving line instead of a bare
+  dashed box with no next step; stat-card numbers use tabular figures;
+  added `:focus-visible` outlines and `prefers-reduced-motion` support.
+  No functional/API changes.
 - **4.0.1** — Fix: `/api/quick-connect` saved a provider/account/route
   without ever testing the key, so an invalid key or model still showed
   "Provider terhubung"; it now runs the same check as the per-account
