@@ -1,6 +1,6 @@
 # Bifrost
 
-**v4.0.2**
+**v4.1.0**
 
 Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
@@ -266,6 +266,10 @@ VPS, whatever):
 - [x] LICENSE (MIT)
 - [x] Request timeouts, automatic log retention, `/health` endpoint, CI
       (GitHub Actions runs the test suite on every push)
+- [x] Full dashboard redesign (sidebar layout, one-form provider setup),
+      followed up with a real-browser visual QA pass and fixes
+- [x] Dashboard appearance — 4 color themes + a pickable animated sidebar
+      mascot, both per-browser preferences
 - [ ] Provider OAuth login flows — **not generically buildable**: this
       needs Bifrost registered as an OAuth app with each provider
       individually via that provider's own developer console, which only
@@ -289,6 +293,12 @@ big multi-feature batch, minor = a new capability, patch = a fix or
 small tweak. Grouped from the commit history; pure documentation-only
 commits aren't counted as their own version.
 
+- **4.1.0** — New capability: 4 color themes (Gelap/Terang/Hangat/Aurora,
+  Settings > Tampilan, saved per-browser in `localStorage`, applied
+  before first paint so there's no flash) and a small idle-animated
+  mascot in the sidebar footer (Robot/Kucing/Anjing/Ular/Orang, pick one
+  in the same panel). Purely cosmetic — no new API surface, no server-
+  side state, nothing shared between users of the same dashboard.
 - **4.0.2** — Visual polish pass on the 4.0.0 redesign, based on actually
   looking at it rendered in a browser for the first time (screenshots):
   a second accent color (`--aurora`, a cool violet-blue) alongside the

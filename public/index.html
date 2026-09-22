@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Bifrost — local AI gateway</title>
+<script>
+  // Applied before the stylesheet loads so there's no flash of the
+  // wrong theme on reload. Kept inline + tiny on purpose.
+  (function () {
+    try {
+      var t = localStorage.getItem('bifrost-theme');
+      if (t && t !== 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -45,6 +55,7 @@
       </button>
     </nav>
     <div class="sidebar-foot">
+      <div class="mascot-slot" id="mascot-slot" aria-hidden="true"></div>
       <div class="live-pill"><span class="dot"></span> gateway aktif</div>
       <button class="btn small" id="logout-btn" style="width:100%">Keluar</button>
     </div>

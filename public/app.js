@@ -22,6 +22,86 @@ function emptyState(text) {
   </div>`;
 }
 
+// ---------------------------------------------------------------------
+// Appearance: theme + mascot. Both are pure client-side preferences
+// (localStorage), no server round-trip needed. The theme itself is
+// applied as early as possible via the inline <script> in index.html
+// (before the stylesheet loads) to avoid a flash of the wrong theme;
+// the functions here handle switching it live from Settings and
+// keeping the mascot in sync.
+// ---------------------------------------------------------------------
+const THEMES = [
+  { id: 'dark', label: 'Gelap' },
+  { id: 'light', label: 'Terang' },
+  { id: 'warm', label: 'Hangat' },
+  { id: 'aurora', label: 'Aurora' }
+];
+
+function getTheme() {
+  try { return localStorage.getItem('bifrost-theme') || 'dark'; } catch { return 'dark'; }
+}
+function setTheme(id) {
+  if (id === 'dark') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', id);
+  try { localStorage.setItem('bifrost-theme', id); } catch {}
+}
+
+// Each mascot is a small line-art SVG matching the sidebar nav icons'
+// stroke style, plus one signature animated gesture (.m-gesture) besides
+// the shared eye-blink (.m-eye) — see the .mascot-* rules in style.css.
+const MASCOTS = {
+  robot: { label: 'Robot', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-robot" fill="none" stroke="currentColor">
+    <g class="m-antenna"><line x1="20" y1="4" x2="20" y2="10" /><circle cx="20" cy="3" r="2" fill="currentColor" stroke="none" /></g>
+    <rect x="8" y="10" width="24" height="20" rx="6" />
+    <circle class="m-eye" cx="15" cy="20" r="2.4" fill="var(--ember)" stroke="none" />
+    <circle class="m-eye" cx="25" cy="20" r="2.4" fill="var(--ember)" stroke="none" />
+    <path d="M14 26h12" />
+  </svg>` },
+  kucing: { label: 'Kucing', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-cat" fill="none" stroke="currentColor">
+    <path d="M12 14 15 6 19 13" /><path d="M28 14 25 6 21 13" />
+    <circle cx="20" cy="21" r="11" />
+    <circle class="m-eye" cx="16" cy="19" r="2" fill="var(--ember)" stroke="none" />
+    <circle class="m-eye" cx="24" cy="19" r="2" fill="var(--ember)" stroke="none" />
+    <path d="M17 25c1.4 1.2 4.6 1.2 6 0" />
+    <path d="M8 21h5M8 24h5M27 21h5M27 24h5" />
+    <path class="m-gesture" d="M30 30q6-2 5 6" />
+  </svg>` },
+  anjing: { label: 'Anjing', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-dog" fill="none" stroke="currentColor">
+    <path d="M10 12q-3 8 2 12" /><path d="M30 12q3 8-2 12" />
+    <circle cx="20" cy="21" r="10" />
+    <circle class="m-eye" cx="16" cy="19" r="2" fill="var(--ember)" stroke="none" />
+    <circle class="m-eye" cx="24" cy="19" r="2" fill="var(--ember)" stroke="none" />
+    <circle cx="20" cy="25" r="1.6" fill="currentColor" stroke="none" />
+    <path class="m-gesture" d="M29 29q6-1 4 7" />
+  </svg>` },
+  ular: { label: 'Ular', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-snake" fill="none" stroke="currentColor">
+    <path class="m-gesture" d="M6 30C10 18 18 26 22 16S34 8 34 8" />
+    <circle cx="34" cy="8" r="4" />
+    <circle class="m-eye" cx="35.5" cy="6.5" r="0.9" fill="var(--ember)" stroke="none" />
+    <path class="m-tongue" d="M38 8l3-1.4M38 8l3 1.4" />
+  </svg>` },
+  orang: { label: 'Orang', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-person" fill="none" stroke="currentColor">
+    <circle cx="20" cy="12" r="6" />
+    <circle class="m-eye" cx="17.5" cy="11" r="1.2" fill="var(--ember)" stroke="none" />
+    <circle class="m-eye" cx="22.5" cy="11" r="1.2" fill="var(--ember)" stroke="none" />
+    <path d="M20 18v12" />
+    <path d="M12 34c1-6 5-8 8-8s7 2 8 8" />
+    <path class="m-gesture" d="M20 20q8-2 9-10" />
+  </svg>` }
+};
+
+function getMascot() {
+  try { return localStorage.getItem('bifrost-mascot') || 'robot'; } catch { return 'robot'; }
+}
+function setMascot(id) {
+  try { localStorage.setItem('bifrost-mascot', id); } catch {}
+  renderMascotSlot();
+}
+function renderMascotSlot() {
+  const slot = document.getElementById('mascot-slot');
+  if (slot) slot.innerHTML = MASCOTS[getMascot()]?.svg || '';
+}
+
 function toast(msg) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
@@ -612,6 +692,18 @@ async function renderSettings() {
     <h1>Settings</h1>
     <p class="subhead">Konfigurasi lokal gateway lu.</p>
     <div class="panel">
+      <h2>Tampilan</h2>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Cuma disimpan di browser ini — gak ngaruh ke user lain yang buka dashboard yang sama.</p>
+      <label style="margin-top:14px">Mode warna</label>
+      <div class="theme-picker" id="theme-picker">
+        ${THEMES.map((t) => `<button type="button" class="theme-swatch theme-${t.id} ${getTheme() === t.id ? 'active' : ''}" data-theme-id="${t.id}" title="${t.label}"><span></span>${t.label}</button>`).join('')}
+      </div>
+      <label>Mascot sidebar</label>
+      <div class="mascot-picker" id="mascot-picker">
+        ${Object.entries(MASCOTS).map(([id, m]) => `<button type="button" class="mascot-option ${getMascot() === id ? 'active' : ''}" data-mascot-id="${id}" title="${m.label}">${m.svg}</button>`).join('')}
+      </div>
+    </div>
+    <div class="panel">
       <h2>Gateway API key</h2>
       <p style="color:var(--text-dim);font-size:13px;margin-top:-6px">Pakai key ini sebagai Bearer token pas nunjuk tool (Claude Code, Cursor, dll) ke <code>http://localhost:8787/v1</code>. Ini bukan API key provider — ini kunci lokal biar cuma tool lu yang bisa lewat gateway.</p>
       <div class="key-box" id="gw-key">${key}</div>
@@ -681,6 +773,18 @@ async function renderSettings() {
       </div>
     </div>
   `;
+  document.getElementById('theme-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-theme-id]');
+    if (!btn) return;
+    setTheme(btn.dataset.themeId);
+    document.querySelectorAll('#theme-picker .theme-swatch').forEach((el) => el.classList.toggle('active', el === btn));
+  });
+  document.getElementById('mascot-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-mascot-id]');
+    if (!btn) return;
+    setMascot(btn.dataset.mascotId);
+    document.querySelectorAll('#mascot-picker .mascot-option').forEach((el) => el.classList.toggle('active', el === btn));
+  });
   document.getElementById('regen-key').addEventListener('click', async () => {
     if (!confirm('Regenerate gateway key? Tool yang udah pakai key lama harus update.')) return;
     const { key } = await api('/gateway-key/regenerate', { method: 'POST' });
@@ -835,6 +939,7 @@ async function boot() {
   if (!status.authenticated) return renderLogin();
   document.getElementById('auth-root').innerHTML = '';
   showChrome(true);
+  renderMascotSlot();
   render('overview');
 }
 

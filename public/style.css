@@ -31,6 +31,87 @@
   --sidebar-w: 230px;
 }
 
+/* ---------------------------------------------------------------- */
+/* Alternate themes — same variable roles, recolored. Default (no      */
+/* data-theme attribute, or data-theme="dark") is the palette above.   */
+/* Applied to <html data-theme="..."> before first paint (see the      */
+/* inline script in index.html) so there's no flash of the wrong theme.*/
+/* ---------------------------------------------------------------- */
+
+/* Terang — clean, neutral-light. Same violet identity as Dark, just
+   inverted: violet ink becomes the text color instead of the bg. */
+:root[data-theme="light"] {
+  --ink: #faf8f5;
+  --surface: #ffffff;
+  --surface-raised: #f3efe7;
+  --line: #e2dbcc;
+  --line-soft: #ece5d7;
+  --text: #241f38;
+  --text-dim: #6f6786;
+  --ember: #b96a17;
+  --ember-dim: #f5decb;
+  --ember-ink: #2e1c02;
+  --aurora: #4d55b8;
+  --aurora-dim: #e2e2f7;
+  --ok: #2b8654;
+  --ok-dim: #dbf0e2;
+  --warn: #ab631b;
+  --warn-dim: #f6e2c4;
+  --danger: #b83b30;
+  --danger-dim: #f7ddd8;
+}
+
+/* Hangat — a cozy, warm-cream mode. Distinct from Terang: warmer bg,
+   deeper terracotta accent, brown ink instead of violet ink, so it
+   reads as "candlelight" rather than just "light mode with less
+   contrast." Deliberately pulled darker/redder than the generic
+   AI-cliché cream-and-terracotta pairing (avoids landing on #F4F1EA /
+   #D97757 specifically). */
+:root[data-theme="warm"] {
+  --ink: #f6ead6;
+  --surface: #fbf3e4;
+  --surface-raised: #efdcb9;
+  --line: #d9bd8b;
+  --line-soft: #e7d2a8;
+  --text: #3a2411;
+  --text-dim: #8a6a42;
+  --ember: #b34a1a;
+  --ember-dim: #edc294;
+  --ember-ink: #260f02;
+  --aurora: #6a5693;
+  --aurora-dim: #e6dcf2;
+  --ok: #3d7a37;
+  --ok-dim: #ddedd2;
+  --warn: #9c5c18;
+  --warn-dim: #eeddb5;
+  --danger: #a13725;
+  --danger-dim: #f0d5cc;
+}
+
+/* Aurora — still dark, but the roles swap emphasis: the primary accent
+   is a cool aurora teal instead of ember, so the whole gateway reads
+   like the night sky the bridge crosses rather than dusk. */
+:root[data-theme="aurora"] {
+  --ink: #0e1420;
+  --surface: #151d2f;
+  --surface-raised: #1c2640;
+  --line: #2b3a5c;
+  --line-soft: #1b2438;
+  --text: #e3e9f7;
+  --text-dim: #7c88ad;
+  --ember: #64dcc0;
+  --ember-dim: #16352f;
+  --ember-ink: #06140f;
+  --aurora: #a48cf0;
+  --aurora-dim: #2c2a52;
+  --ok: #6fb98f;
+  --ok-dim: #1a3328;
+  --warn: #e0a24e;
+  --warn-dim: #3d2c14;
+  --danger: #e2685f;
+  --danger-dim: #3d1f1c;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -322,3 +403,86 @@ label:first-child { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
 }
+
+/* ---------------------------------------------------------------- */
+/* Mascot (sidebar) — small idle-animated line-art creature, picked   */
+/* in Settings > Tampilan. Eyes share one blink animation; each        */
+/* mascot has one signature gesture on .m-gesture.                    */
+/* ---------------------------------------------------------------- */
+.mascot-slot { display: flex; justify-content: center; margin-bottom: 10px; }
+.mascot {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--text-dim);
+}
+.mascot .m-eye { transform-box: fill-box; transform-origin: center; animation: mascot-blink 4.5s ease-in-out infinite; }
+@keyframes mascot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.15); } }
+
+.mascot-robot .m-antenna { transform-box: fill-box; transform-origin: center; animation: mascot-pulse 1.8s ease-in-out infinite; }
+@keyframes mascot-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+.mascot-cat .m-gesture, .mascot-dog .m-gesture {
+  transform-box: fill-box;
+  transform-origin: top left;
+  animation: mascot-wag 1.6s ease-in-out infinite;
+}
+.mascot-dog .m-gesture { animation-duration: .9s; }
+@keyframes mascot-wag { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-14deg); } }
+
+.mascot-snake .m-gesture { animation: mascot-slither 3.2s ease-in-out infinite; }
+@keyframes mascot-slither { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(1.5px, -1px); } }
+.mascot-snake .m-tongue {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: mascot-flick 3.2s ease-in-out infinite;
+}
+@keyframes mascot-flick { 0%, 40%, 100% { opacity: 0; transform: scaleX(.4); } 45%, 55% { opacity: 1; transform: scaleX(1); } }
+
+.mascot-person .m-gesture {
+  transform-box: fill-box;
+  transform-origin: bottom left;
+  animation: mascot-wave 1.4s ease-in-out infinite;
+}
+@keyframes mascot-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(12deg); } }
+
+/* ---------------------------------------------------------------- */
+/* Appearance pickers (Settings tab)                                  */
+/* ---------------------------------------------------------------- */
+.theme-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+.theme-swatch span { display: block; width: 34px; height: 20px; border-radius: 4px; border: 1px solid var(--line); }
+.theme-swatch.active { border-color: var(--ember); color: var(--text); }
+.theme-swatch.theme-dark span { background: linear-gradient(135deg, #15121f 50%, #f0a94e 50%); }
+.theme-swatch.theme-light span { background: linear-gradient(135deg, #faf8f5 50%, #b96a17 50%); }
+.theme-swatch.theme-warm span { background: linear-gradient(135deg, #f6ead6 50%, #b34a1a 50%); }
+.theme-swatch.theme-aurora span { background: linear-gradient(135deg, #0e1420 50%, #64dcc0 50%); }
+
+.mascot-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.mascot-option {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+  line-height: 0;
+}
+.mascot-option .mascot { width: 28px; height: 28px; animation: none !important; }
+.mascot-option .mascot .m-eye, .mascot-option .mascot .m-antenna, .mascot-option .mascot .m-gesture, .mascot-option .mascot .m-tongue { animation: none !important; }
+.mascot-option.active { border-color: var(--ember); color: var(--text); }

@@ -1,6 +1,6 @@
 {
   "name": "bifrost",
-  "version": "4.0.2",
+  "version": "4.1.0",
   "description": "Local AI routing gateway - OpenAI-compatible endpoint with multi-provider, multi-account fallback",
   "main": "server.js",
   "type": "commonjs",
