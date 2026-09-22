@@ -1,5 +1,7 @@
 # Bifrost
 
+**v4.0.0**
+
 Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
 multi-account rotation and rate-limit-aware automatic fallback — when a
@@ -261,13 +263,44 @@ VPS, whatever):
 - [ ] Image generation / audio-TTS endpoints (out of scope for a
       coding-tool-facing gateway; embeddings covered the realistic part
       of "multi-modal")
-- [ ] Provider catalog/presets for common OpenAI-compatible providers
-      (Groq, Together, DeepSeek, etc. — today you type the base URL by hand)
-- [ ] Circuit breaker (today: per-account cooldown only, not a
-      whole-provider trip after repeated failures)
 
 ## Stack
 
 Express + Node's built-in `node:sqlite`, vanilla JS dashboard (no build
 step). Node 22.5+ (24+ recommended). `npm test` runs the regression
 suite (protocol translation + compression); CI runs it on every push.
+
+## Changelog
+
+Versioned `MAJOR.MINOR.PATCH`: major = structural/breaking changes or a
+big multi-feature batch, minor = a new capability, patch = a fix or
+small tweak. Grouped from the commit history; pure documentation-only
+commits aren't counted as their own version.
+
+- **4.0.0** — Full dashboard redesign: sidebar layout, new visual
+  identity, one-form provider setup (`/api/quick-connect`)
+- **3.3.1** — `/api/quick-connect` endpoint
+- **3.3.0** — Request timeouts, automatic log retention, `/health`
+  endpoint, CI + committed regression test suite
+- **3.2.0** — LICENSE (MIT), Docker support, token/prompt compression
+- **3.1.1** — Fix: `/v1/embeddings` was logging the client's input
+  instead of the actual routed model/provider/usage
+- **3.1.0** — `/v1/embeddings` endpoint (OpenAI + Gemini)
+- **3.0.0** — Circuit breaker, model dropdown, provider catalog presets,
+  live-refreshing logs, daily usage chart
+- **2.1.0** — Security hardening: rate-limited login, key preview,
+  security headers
+- **2.0.0** — Native Anthropic `/v1/messages` endpoint + tool-calling
+  translation across providers (Claude Code support)
+- **1.0.0** — Dashboard authentication (previously `/api/*` had none at
+  all — this closed a real security hole)
+- **0.4.1** — Migrated `better-sqlite3` to Node's built-in `node:sqlite`
+  (removes the native-compile requirement)
+- **0.4.0** — Encrypted cloud sync via a private GitHub Gist
+- **0.3.1** — Real usage/token capture for streaming requests
+- **0.3.0** — Weighted and least-cost routing strategies
+- **0.2.0** — Per-provider rate-limit detection from real response
+  headers/body instead of a flat guess
+- **0.1.1** — Renamed the project to Bifrost
+- **0.1.0** — Initial MVP: OpenAI-compatible gateway, multi-provider,
+  multi-account fallback, dashboard
