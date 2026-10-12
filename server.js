@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { db, nanoid, getSetting, setSetting } = require('./lib/db');
+const analytics = require('./lib/analytics');
 const { attemptChain, attemptEmbeddings, testAccount, listModelsForProvider, estimateCost, logRequest, getCombo } = require('./lib/router');
 const { DEFAULT_CONFIG: COMPRESSION_DEFAULTS } = require('./lib/compression');
 const sync = require('./lib/sync');
@@ -552,6 +553,59 @@ api.get('/stats/daily', (req, res) => {
     ORDER BY day ASC
   `).all(`-${days} days`);
   res.json(rows);
+});
+
+// Analytics tab: latency percentiles per provider, cost per model,
+// success-rate trend, per-route comparison. All scoped to the last N days
+// (default 14, max 90) so it matches the retention window sensibly.
+api.get('/stats/analytics', (req, res) => {
+  const days = Math.min(Math.max(parseInt(req.query.days) || 14, 1), 90);
+  const since = `-${days} days`;
+
+  const latencyRows = db.prepare(`
+    SELECT provider_name, latency_ms FROM request_logs
+    WHERE status = 'success' AND provider_name IS NOT NULL AND date(ts) >= date('now', ?)
+  `).all(since);
+
+  const costByModel = db.prepare(`
+    SELECT model, COUNT(*) as requests,
+           SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens,
+           SUM(cost_estimate) as cost
+    FROM request_logs
+    WHERE model IS NOT NULL AND date(ts) >= date('now', ?)
+    GROUP BY model ORDER BY cost DESC, requests DESC
+  `).all(since);
+
+  const trend = db.prepare(`
+    SELECT date(ts) as day, COUNT(*) as requests,
+           SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors
+    FROM request_logs
+    WHERE date(ts) >= date('now', ?)
+    GROUP BY date(ts) ORDER BY day ASC
+  `).all(since);
+
+  const byRoute = db.prepare(`
+    SELECT COALESCE(c.name, '(route dihapus / tidak ada)') as route_name,
+           COUNT(*) as requests,
+           SUM(CASE WHEN l.status = 'error' THEN 1 ELSE 0 END) as errors,
+           AVG(CASE WHEN l.status = 'success' AND l.latency_ms > 0 THEN l.latency_ms END) as avg_latency_ms,
+           SUM(l.cost_estimate) as cost
+    FROM request_logs l LEFT JOIN combos c ON c.id = l.combo_id
+    WHERE date(l.ts) >= date('now', ?)
+    GROUP BY l.combo_id ORDER BY requests DESC
+  `).all(since);
+
+  res.json({
+    days,
+    latencyByProvider: analytics.latencyByProvider(latencyRows),
+    costByModel,
+    successTrend: analytics.withSuccessRate(trend),
+    byRoute: byRoute.map((r) => ({
+      ...r,
+      success_rate: r.requests > 0 ? Math.round(((r.requests - r.errors) / r.requests) * 1000) / 10 : null,
+      avg_latency_ms: r.avg_latency_ms == null ? null : Math.round(r.avg_latency_ms)
+    }))
+  });
 });
 
 api.get('/settings/compression', (req, res) => {

@@ -67,18 +67,23 @@ const MASCOTS = {
     <path class="m-gesture" d="M30 30q6-2 5 6" />
   </svg>` },
   anjing: { label: 'Anjing', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-dog" fill="none" stroke="currentColor">
-    <path d="M10 12q-3 8 2 12" /><path d="M30 12q3 8-2 12" />
-    <circle cx="20" cy="21" r="10" />
-    <circle class="m-eye" cx="16" cy="19" r="2" fill="var(--ember)" stroke="none" />
-    <circle class="m-eye" cx="24" cy="19" r="2" fill="var(--ember)" stroke="none" />
-    <circle cx="20" cy="25" r="1.6" fill="currentColor" stroke="none" />
-    <path class="m-gesture" d="M29 29q6-1 4 7" />
+    <path d="M12.5 13Q4.5 12.5 5.5 26Q10.5 27.5 12.2 21.5" />
+    <path d="M27.5 13Q35.5 12.5 34.5 26Q29.5 27.5 27.8 21.5" />
+    <circle cx="20" cy="20" r="9.5" />
+    <circle class="m-eye" cx="16" cy="17.5" r="1.9" fill="var(--ember)" stroke="none" />
+    <circle class="m-eye" cx="24" cy="17.5" r="1.9" fill="var(--ember)" stroke="none" />
+    <ellipse cx="20" cy="24" rx="4.6" ry="3.3" />
+    <ellipse cx="20" cy="22.6" rx="1.7" ry="1.2" fill="currentColor" stroke="none" />
+    <path d="M20 23.8v1.8M17.6 26.2q2.4 1.8 4.8 0" />
+    <path class="m-gesture" d="M29 31q6-1 4.5 7" />
   </svg>` },
   ular: { label: 'Ular', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-snake" fill="none" stroke="currentColor">
-    <path class="m-gesture" d="M6 30C10 18 18 26 22 16S34 8 34 8" />
-    <circle cx="34" cy="8" r="4" />
-    <circle class="m-eye" cx="35.5" cy="6.5" r="0.9" fill="var(--ember)" stroke="none" />
-    <path class="m-tongue" d="M38 8l3-1.4M38 8l3 1.4" />
+    <g class="m-gesture">
+      <path d="M4 32C8 22 16 32 20 22S28 14 29 12" style="stroke-width:3.4" />
+      <ellipse cx="31.5" cy="10.5" rx="5" ry="4" />
+      <circle class="m-eye" cx="32.8" cy="9.2" r="1" fill="var(--ember)" stroke="none" />
+      <path class="m-tongue" d="M36.3 11l3-1.3M36.3 11l3 1.5" />
+    </g>
   </svg>` },
   orang: { label: 'Orang', svg: `<svg viewBox="0 0 40 40" class="mascot mascot-person" fill="none" stroke="currentColor">
     <circle cx="20" cy="12" r="6" />
@@ -177,10 +182,119 @@ function render(tab) {
   // Only the Logs tab auto-refreshes; leaving it should stop the interval
   // so other tabs aren't silently re-fetching in the background.
   if (logsRefreshInterval) { clearInterval(logsRefreshInterval); logsRefreshInterval = null; }
-  const renderers = { overview: renderOverview, providers: renderProviders, combos: renderCombos, logs: renderLogs, settings: renderSettings };
+  const renderers = { overview: renderOverview, providers: renderProviders, combos: renderCombos, analytics: renderAnalytics, logs: renderLogs, settings: renderSettings };
   (renderers[tab] || renderOverview)();
 }
 let logsRefreshInterval = null;
+
+// ---------------------------------------------------------------------
+// Analytics — latency percentiles, cost per model, success-rate trend,
+// per-route comparison. Data comes from GET /api/stats/analytics; all
+// names shown (provider/model/route) are user-controlled, so escape them.
+// ---------------------------------------------------------------------
+let analyticsDays = 14;
+
+function fmtMs(ms) {
+  if (ms == null) return '-';
+  return ms >= 1000 ? (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's' : ms + 'ms';
+}
+function fmtPct(v) { return v == null ? '-' : v + '%'; }
+function rateColor(v) {
+  if (v == null) return 'var(--text-dim)';
+  return v >= 95 ? 'var(--ok)' : v >= 80 ? 'var(--warn)' : 'var(--danger)';
+}
+
+function latencyBarsHtml(rows) {
+  if (!rows.length) return emptyState('Belum ada request sukses di rentang ini, jadi belum ada latency yang bisa dihitung.');
+  const max = Math.max(1, ...rows.map((r) => r.p95 || 0));
+  return `<div class="hbars">${rows.map((r) => `
+    <div class="hbar-row">
+      <div class="hbar-label" title="${escapeHtml(r.provider_name)}">${escapeHtml(r.provider_name)}<small>${r.samples} sampel</small></div>
+      <div class="hbar-tracks">
+        <div class="hbar-track"><div class="hbar-fill p50" style="width:${((r.p50 || 0) / max) * 78}%"></div><span>p50 ${fmtMs(r.p50)}</span></div>
+        <div class="hbar-track"><div class="hbar-fill p95" style="width:${((r.p95 || 0) / max) * 78}%"></div><span>p95 ${fmtMs(r.p95)}</span></div>
+      </div>
+    </div>`).join('')}</div>
+    <p class="hint">Cuma request yang sukses yang dihitung — error instan (mis. key salah) atau timeout gak boleh ngerusak angka kecepatan provider.</p>`;
+}
+
+function successTrendSvg(trend) {
+  const pts = trend.filter((d) => d.success_rate != null);
+  if (!pts.length) return emptyState('Belum ada request di rentang ini.');
+  const W = 720, H = 190, PADX = 34, PADT = 14, PADB = 26;
+  const innerW = W - PADX - 12, innerH = H - PADT - PADB;
+  const x = (i) => PADX + (pts.length === 1 ? innerW / 2 : (i / (pts.length - 1)) * innerW);
+  // Zoom the y axis to the data (floor to a 10% step, always ending at 100%)
+  // — a forced 0-100 axis squashes a 77-98% series into the top sliver.
+  const minRate = Math.min(...pts.map((d) => d.success_rate));
+  const lo = Math.max(0, Math.floor((minRate - 5) / 10) * 10);
+  const y = (v) => PADT + (1 - (v - lo) / (100 - lo)) * innerH;
+  const grid = [lo, Math.round((lo + 100) / 2), 100].map((v) => `
+    <line x1="${PADX}" y1="${y(v)}" x2="${W - 12}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="${v === lo ? '0' : '3 4'}" />
+    <text x="${PADX - 6}" y="${y(v) + 3}" font-size="9" fill="var(--text-dim)" text-anchor="end" font-family="var(--mono)">${v}%</text>`).join('');
+  const line = pts.length > 1 ? `<polyline points="${pts.map((d, i) => `${x(i)},${y(d.success_rate)}`).join(' ')}" fill="none" stroke="var(--aurora)" stroke-width="2" stroke-linejoin="round" />` : '';
+  const dots = pts.map((d, i) => `
+    <circle cx="${x(i)}" cy="${y(d.success_rate)}" r="4" fill="${rateColor(d.success_rate)}" stroke="var(--surface)" stroke-width="1.5">
+      <title>${escapeHtml(d.day)}: ${d.success_rate}% sukses (${d.requests - (d.errors || 0)}/${d.requests})</title>
+    </circle>`).join('');
+  const step = Math.ceil(pts.length / 8);
+  const labels = pts.map((d, i) => (i % step === 0 || i === pts.length - 1)
+    ? `<text x="${x(i)}" y="${H - 8}" font-size="9" fill="var(--text-dim)" text-anchor="middle" font-family="var(--mono)">${escapeHtml(d.day.slice(5))}</text>` : '').join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:220px">${grid}${line}${dots}${labels}</svg>`;
+}
+
+function costByModelHtml(rows) {
+  if (!rows.length) return emptyState('Belum ada request di rentang ini.');
+  const maxCost = Math.max(...rows.map((r) => r.cost || 0), 0);
+  return `<table>
+    <thead><tr><th>Model</th><th>Requests</th><th>Tokens (in/out)</th><th style="width:34%">Cost</th></tr></thead>
+    <tbody>${rows.map((r) => `
+      <tr>
+        <td>${escapeHtml(r.model)}</td>
+        <td>${r.requests}</td>
+        <td>${r.input_tokens || 0}/${r.output_tokens || 0}</td>
+        <td><div class="cost-cell"><div class="cost-bar"><div style="width:${maxCost > 0 ? ((r.cost || 0) / maxCost) * 100 : 0}%"></div></div><span>$${(r.cost || 0).toFixed(4)}</span></div></td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+function routeTableHtml(rows) {
+  if (!rows.length) return emptyState('Belum ada request di rentang ini.');
+  return `<table>
+    <thead><tr><th>Route</th><th>Requests</th><th>Sukses</th><th>Latency rata-rata</th><th>Cost</th></tr></thead>
+    <tbody>${rows.map((r) => `
+      <tr>
+        <td>${escapeHtml(r.route_name)}</td>
+        <td>${r.requests}</td>
+        <td style="color:${rateColor(r.success_rate)}">${fmtPct(r.success_rate)}</td>
+        <td>${fmtMs(r.avg_latency_ms)}</td>
+        <td>$${(r.cost || 0).toFixed(4)}</td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+async function renderAnalytics() {
+  view.innerHTML = `
+    <div class="row-between">
+      <div><h1>Analytics</h1><p class="subhead">Seberapa cepat, seberapa boros, seberapa stabil — per provider, model, dan route.</p></div>
+      <div class="range-picker" id="range-picker">
+        ${[7, 14, 30, 90].map((d) => `<button type="button" data-days="${d}" class="${d === analyticsDays ? 'active' : ''}">${d} hari</button>`).join('')}
+      </div>
+    </div>
+    <div id="an-body">Loading…</div>`;
+  document.getElementById('range-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-days]');
+    if (!btn) return;
+    analyticsDays = parseInt(btn.dataset.days, 10);
+    renderAnalytics();
+  });
+  let data;
+  try { data = await api(`/stats/analytics?days=${analyticsDays}`); }
+  catch (err) { document.getElementById('an-body').innerHTML = emptyState('Gagal ngambil data analytics: ' + escapeHtml(err.message)); return; }
+  document.getElementById('an-body').innerHTML = `
+    <div class="panel"><h2>Latency per provider</h2>${latencyBarsHtml(data.latencyByProvider)}</div>
+    <div class="panel"><h2>Success rate harian</h2>${successTrendSvg(data.successTrend)}</div>
+    <div class="panel"><h2>Cost per model</h2>${costByModelHtml(data.costByModel)}</div>
+    <div class="panel"><h2>Perbandingan route</h2>${routeTableHtml(data.byRoute)}</div>`;
+}
 
 // ---------------------------------------------------------------------
 // Overview
@@ -661,7 +775,7 @@ async function renderLogs() {
         <tbody>
           ${logs.map((l) => `
             <tr>
-              <td>${new Date(l.ts + 'Z').toLocaleTimeString()}</td>
+              <td class="nowrap">${new Date(l.ts + 'Z').toLocaleTimeString()}</td>
               <td>${l.provider_name || '-'}${l.account_label ? ' / ' + l.account_label : ''}</td>
               <td>${l.model || '-'}</td>
               <td>

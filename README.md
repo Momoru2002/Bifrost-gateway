@@ -1,6 +1,6 @@
 # Bifrost
 
-**v4.1.0**
+**v4.2.0**
 
 Local AI routing gateway. Puts two protocol-compatible endpoints
 (`http://localhost:8787/v1`) in front of multiple LLM providers, with
@@ -268,6 +268,7 @@ VPS, whatever):
       (GitHub Actions runs the test suite on every push)
 - [x] Full dashboard redesign (sidebar layout, one-form provider setup),
       followed up with a real-browser visual QA pass and fixes
+- [x] Analytics tab — latency percentiles, cost per model, success-rate trend, per-route comparison
 - [x] Dashboard appearance — 4 color themes + a pickable animated sidebar
       mascot, both per-browser preferences
 - [ ] Provider OAuth login flows — **not generically buildable**: this
@@ -277,6 +278,26 @@ VPS, whatever):
 - [ ] Image generation / audio-TTS endpoints (out of scope for a
       coding-tool-facing gateway; embeddings covered the realistic part
       of "multi-modal")
+
+## Verifying the dashboard visually
+
+A real headless Chromium works in the build sandbox via the npm package
+`@sparticuz/chromium` (+ `puppeteer-core`), no system browser needed:
+
+```js
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({
+  args: [...chromium.args, '--no-sandbox'],
+  executablePath: await chromium.executablePath(),
+  headless: 'shell'
+});
+```
+
+Start `server.js` on a spare port against a scratch `data/` dir, seed
+`request_logs`, log in over HTTP, reuse the session cookie in
+`page.setCookie`, then screenshot each tab (and each theme via
+`localStorage['bifrost-theme']`). Watch `page.on('response')` for 4xx/5xx.
 
 ## Stack
 
@@ -293,6 +314,18 @@ big multi-feature batch, minor = a new capability, patch = a fix or
 small tweak. Grouped from the commit history; pure documentation-only
 commits aren't counted as their own version.
 
+- **4.2.0** — New capability: an **Analytics** tab (`GET /api/stats/analytics`,
+  7/14/30/90-day window). Latency p50/p95 per provider (successful
+  requests only, so an instant bad-key error or a timeout can't distort
+  "how fast is this provider"), cost + tokens per model, a daily
+  success-rate trend (y axis auto-zoomed to the data), and a per-route
+  comparison (success %, average latency, cost). Percentile/aggregation
+  logic lives in `lib/analytics.js` as pure functions with unit tests.
+  Also: this was the first release verified in a **real headless
+  Chromium** (see "Verifying the dashboard visually" below) rather than
+  by API checks alone — which immediately caught and fixed a squashed
+  chart axis, low-contrast bar labels, a wrapping log timestamp, and two
+  mascots (dog, snake) that did not read as what they were meant to be.
 - **4.1.0** — New capability: 4 color themes (Gelap/Terang/Hangat/Aurora,
   Settings > Tampilan, saved per-browser in `localStorage`, applied
   before first paint so there's no flash) and a small idle-animated

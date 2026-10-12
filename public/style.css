@@ -486,3 +486,36 @@ label:first-child { margin-top: 0; }
 .mascot-option .mascot { width: 28px; height: 28px; animation: none !important; }
 .mascot-option .mascot .m-eye, .mascot-option .mascot .m-antenna, .mascot-option .mascot .m-gesture, .mascot-option .mascot .m-tongue { animation: none !important; }
 .mascot-option.active { border-color: var(--ember); color: var(--text); }
+
+/* ---------------------------------------------------------------- */
+/* Analytics tab                                                      */
+/* ---------------------------------------------------------------- */
+.range-picker { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 3px; }
+.range-picker button {
+  background: none; border: 0; color: var(--text-dim); font-family: var(--sans); font-size: 12px;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer;
+}
+.range-picker button.active { background: var(--ember-dim); color: var(--ember); }
+
+.hbars { display: flex; flex-direction: column; gap: 16px; }
+.hbar-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; }
+.hbar-label { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-label small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+.hbar-tracks { display: flex; flex-direction: column; gap: 5px; }
+.hbar-track { display: flex; align-items: center; gap: 8px; height: 18px; }
+.hbar-fill { height: 100%; border-radius: 4px; min-width: 3px; flex: none; }
+.hbar-fill.p50 { background: var(--aurora); }
+.hbar-fill.p95 { background: var(--ember); }
+.hbar-track span { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hint { color: var(--text-dim); font-size: 12px; margin: 14px 0 0; }
+
+.cost-cell { display: flex; align-items: center; gap: 10px; }
+.cost-bar { flex: 1; height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+.cost-bar div { height: 100%; background: var(--ember); border-radius: 3px; }
+.cost-cell span { font-family: var(--mono); font-size: 12px; min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 860px) {
+  .hbar-row { grid-template-columns: 1fr; gap: 6px; }
+}
+
+td.nowrap { white-space: nowrap; }
